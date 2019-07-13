@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ package com.mongodb.internal.connection;
 import com.mongodb.MongoInternalException;
 import com.mongodb.MongoInterruptedException;
 import com.mongodb.MongoTimeoutException;
+import com.mongodb.internal.connection.ConcurrentLinkedDeque.RemovalReportingIterator;
 
-import java.util.Deque;
 import java.util.Iterator;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -35,21 +35,35 @@ public class ConcurrentPool<T> implements Pool<T> {
     private final int maxSize;
     private final ItemFactory<T> itemFactory;
 
-    private final Deque<T> available = new ConcurrentLinkedDeque<T>();
+    private final ConcurrentLinkedDeque<T> available = new ConcurrentLinkedDeque<T>();
     private final Semaphore permits;
     private volatile boolean closed;
 
+    public enum Prune {
+        /**
+         * Prune this element
+         */
+        YES,
+        /**
+         * Don't prone this element
+         */
+        NO,
+        /**
+         * Don't prune this element and stop attempting to prune additional elements
+         */
+        STOP
+    }
     /**
      * Factory for creating and closing pooled items.
      *
      * @param <T>
      */
     public interface ItemFactory<T> {
-        T create();
+        T create(boolean initialize);
 
         void close(T t);
 
-        boolean shouldPrune(T t);
+        Prune shouldPrune(T t);
     }
 
     /**
@@ -129,39 +143,42 @@ public class ConcurrentPool<T> implements Pool<T> {
 
         T t = available.pollLast();
         if (t == null) {
-            t = createNewAndReleasePermitIfFailure();
+            t = createNewAndReleasePermitIfFailure(false);
         }
 
         return t;
     }
 
     public void prune() {
-        int currentAvailableCount = getAvailableCount();
-        for (int numAttempts = 0; numAttempts < currentAvailableCount; numAttempts++) {
-            if (!acquirePermit(10, TimeUnit.MILLISECONDS)) {
+        for (RemovalReportingIterator<T> iter = available.iterator(); iter.hasNext();) {
+            T cur = iter.next();
+            Prune shouldPrune = itemFactory.shouldPrune(cur);
+
+            if (shouldPrune == Prune.STOP) {
                 break;
             }
-            T cur = available.pollFirst();
-            if (cur == null) {
-                releasePermit();
-                break;
+
+            if (shouldPrune == Prune.YES) {
+                boolean removed = iter.reportingRemove();
+                if (removed) {
+                    close(cur);
+                }
             }
-            release(cur, itemFactory.shouldPrune(cur));
         }
     }
 
-    public void ensureMinSize(final int minSize) {
+    public void ensureMinSize(final int minSize, final boolean initialize) {
         while (getCount() < minSize) {
             if (!acquirePermit(10, TimeUnit.MILLISECONDS)) {
                 break;
             }
-            release(createNewAndReleasePermitIfFailure());
+            release(createNewAndReleasePermitIfFailure(initialize));
         }
     }
 
-    private T createNewAndReleasePermitIfFailure() {
+    private T createNewAndReleasePermitIfFailure(final boolean initialize) {
         try {
-            T newMember = itemFactory.create();
+            T newMember = itemFactory.create(initialize);
             if (newMember == null) {
                 throw new MongoInternalException("The factory for the pool created a null item");
             }

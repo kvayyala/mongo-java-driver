@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,12 @@ class CommandResultArrayCodec<T> extends BsonArrayCodec {
 
         List<T> list = new ArrayList<T>();
         while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
-            list.add(decoder.decode(reader, decoderContext));
+            if (reader.getCurrentBsonType() == BsonType.NULL) {
+                reader.readNull();
+                list.add(null);
+            } else {
+                list.add(decoder.decode(reader, decoderContext));
+            }
         }
         reader.readEndArray();
 

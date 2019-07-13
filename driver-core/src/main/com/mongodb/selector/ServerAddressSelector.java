@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import static com.mongodb.assertions.Assertions.notNull;
  *
  * @since 3.0
  */
+@Deprecated
 public class ServerAddressSelector implements ServerSelector {
     private final ServerAddress serverAddress;
 
@@ -53,6 +54,7 @@ public class ServerAddressSelector implements ServerSelector {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public List<ServerDescription> select(final ClusterDescription clusterDescription) {
         if (clusterDescription.getByServerAddress(serverAddress) != null) {
             return Arrays.asList(clusterDescription.getByServerAddress(serverAddress));

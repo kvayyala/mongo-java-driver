@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,9 @@ import java.util.List;
  * <p>Allows async methods to be converted into event-based {@link Observable}s.</p>
  *
  * @since 3.1
+ * @deprecated Prefer the Reactive Streams-based asynchronous driver (mongodb-driver-reactivestreams artifactId)
  */
+@Deprecated
 public final class Observables {
 
     /**
@@ -59,7 +61,7 @@ public final class Observables {
      * {@code
      *    Observable<Long> countObservable = observe(new Block<SingleResultCallback<Long>>() {
      *        public void apply(final SingleResultCallback<Long> callback) {
-     *            collection.count(callback);
+     *            collection.countDocuments(callback);
      *        }
      *    });
      * }

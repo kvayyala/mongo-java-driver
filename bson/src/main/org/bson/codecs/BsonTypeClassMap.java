@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import org.bson.Document;
 import org.bson.types.Binary;
 import org.bson.types.Code;
 import org.bson.types.CodeWithScope;
+import org.bson.types.Decimal128;
 import org.bson.types.MaxKey;
 import org.bson.types.MinKey;
 import org.bson.types.ObjectId;
@@ -35,6 +36,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * <p>A map from a BSON types to the Class to which it should be decoded.  This class is useful if, for example,
@@ -50,6 +52,7 @@ import java.util.Map;
  *     <li><em>DOUBLE</em>: {@code java.lang.Double.class} </li>
  *     <li><em>INT32</em>: {@code java.lang.Integer.class} </li>
  *     <li><em>INT64</em>: {@code java.lang.Long.class} </li>
+ *     <li><em>DECIMAL128</em>: {@code org.bson.types.Decimal128.class} </li>
  *     <li><em>STRING</em>: {@code java.lang.String.class} </li>
  *     <li><em>BINARY</em>: {@code org.bson.types.Binary.class} </li>
  *     <li><em>OBJECT_ID</em>: {@code org.bson.types.ObjectId.class} </li>
@@ -87,6 +90,9 @@ public class BsonTypeClassMap {
         this(Collections.<BsonType, Class<?>>emptyMap());
     }
 
+    Set<BsonType> keys() {
+        return map.keySet();
+    }
 
     /**
      * Gets the Class that is mapped to the given BSON type.
@@ -108,6 +114,7 @@ public class BsonTypeClassMap {
         map.put(BsonType.DOUBLE, Double.class);
         map.put(BsonType.INT32, Integer.class);
         map.put(BsonType.INT64, Long.class);
+        map.put(BsonType.DECIMAL128, Decimal128.class);
         map.put(BsonType.MAX_KEY, MaxKey.class);
         map.put(BsonType.MIN_KEY, MinKey.class);
         map.put(BsonType.JAVASCRIPT, Code.class);

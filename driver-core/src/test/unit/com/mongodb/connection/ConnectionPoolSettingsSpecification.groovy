@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 package com.mongodb.connection
 
 import com.mongodb.ConnectionString
+import com.mongodb.event.ConnectionPoolListener
 import spock.lang.Specification
 import spock.lang.Unroll
 
@@ -57,6 +58,29 @@ class ConnectionPoolSettingsSpecification extends Specification {
                 5, SECONDS)
                 .maintenanceFrequency(
                 1000, SECONDS)
+                .build()                      | 5000 | 75 | 11 | 101000 | 51000 | 1 | 5000 | 1000000
+        ConnectionPoolSettings
+                .builder(ConnectionPoolSettings.builder()
+                    .maxWaitTime(5, SECONDS)
+                    .maxSize(75)
+                    .maxWaitQueueSize(11)
+                    .maxConnectionLifeTime(101, SECONDS)
+                    .maxConnectionIdleTime(51, SECONDS)
+                    .minSize(1)
+                    .maintenanceInitialDelay(5, SECONDS)
+                    .maintenanceFrequency(1000, SECONDS)
+                    .build())
+                .build()                      | 5000 | 75 | 11 | 101000 | 51000 | 1 | 5000 | 1000000
+        ConnectionPoolSettings
+                .builder(ConnectionPoolSettings.builder().build())
+                .maxWaitTime(5, SECONDS)
+                .maxSize(75)
+                .maxWaitQueueSize(11)
+                .maxConnectionLifeTime(101, SECONDS)
+                .maxConnectionIdleTime(51, SECONDS)
+                .minSize(1)
+                .maintenanceInitialDelay(5, SECONDS)
+                .maintenanceFrequency(1000, SECONDS)
                 .build()                      | 5000 | 75 | 11 | 101000 | 51000 | 1 | 5000 | 1000000
     }
 
@@ -130,6 +154,27 @@ class ConnectionPoolSettingsSpecification extends Specification {
         settings.getMaxConnectionIdleTime(MILLISECONDS) == 200
         settings.getMaxConnectionLifeTime(MILLISECONDS) == 300
         settings.getMaxWaitQueueSize() == 70
+    }
+
+    def 'should apply settings'() {
+        given:
+        def defaultSettings = ConnectionPoolSettings.builder().build()
+        def customSettings = ConnectionPoolSettings
+                .builder()
+                .addConnectionPoolListener(Stub(ConnectionPoolListener))
+                .maxWaitTime(5, SECONDS)
+                .maxSize(75)
+                .maxWaitQueueSize(11)
+                .maxConnectionLifeTime(101, SECONDS)
+                .maxConnectionIdleTime(51, SECONDS)
+                .minSize(1)
+                .maintenanceInitialDelay(5, SECONDS)
+                .maintenanceFrequency(1000, SECONDS)
+                .build()
+
+        expect:
+        ConnectionPoolSettings.builder().applySettings(customSettings).build() == customSettings
+        ConnectionPoolSettings.builder(customSettings).applySettings(defaultSettings).build() == defaultSettings
     }
 
     def 'toString should be overridden'() {

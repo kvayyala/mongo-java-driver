@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONObjectITIONS OF ANY KINObject, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -28,11 +28,17 @@ import java.util.regex.Pattern
 import static com.mongodb.ClusterFixture.serverVersionAtLeast
 import static com.mongodb.client.model.Filters.all
 import static com.mongodb.client.model.Filters.and
+import static com.mongodb.client.model.Filters.bitsAllClear
+import static com.mongodb.client.model.Filters.bitsAllSet
+import static com.mongodb.client.model.Filters.bitsAnyClear
+import static com.mongodb.client.model.Filters.bitsAnySet
 import static com.mongodb.client.model.Filters.elemMatch
 import static com.mongodb.client.model.Filters.eq
 import static com.mongodb.client.model.Filters.exists
+import static com.mongodb.client.model.Filters.expr
 import static com.mongodb.client.model.Filters.gt
 import static com.mongodb.client.model.Filters.gte
+import static com.mongodb.client.model.Filters.jsonSchema
 import static com.mongodb.client.model.Filters.lt
 import static com.mongodb.client.model.Filters.lte
 import static com.mongodb.client.model.Filters.mod
@@ -64,7 +70,6 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
 
     def setup() {
         getCollectionHelper().insertDocuments(a, b, c)
-        getCollectionHelper().createIndex(new Document('y', 'text'))
     }
 
     def 'find'(Bson filter) {
@@ -74,6 +79,7 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
     def 'eq'() {
         expect:
         find(eq('x', 1)) == [a]
+        find(eq(2)) == [b]
     }
 
     def '$ne'() {
@@ -81,7 +87,6 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
         find(ne('x', 1)) == [b, c]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def '$not'() {
         expect:
         find(not(eq('x', 1))) == [b, c]
@@ -89,7 +94,31 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
         find(not(regex('y', 'a.*'))) == [b, c]
 
         when:
-        find(not(and(eq('x', 1), eq('x', 1)))) == [b, c]
+        def dbref = Document.parse('{$ref: "1", $id: "1"}')
+        def dbrefDoc = new Document('_id', 4).append('dbref', dbref)
+        getCollectionHelper().insertDocuments(dbrefDoc)
+
+        then:
+        find(not(eq('dbref', dbref))) == [a, b, c]
+
+        when:
+        getCollectionHelper().deleteOne(dbrefDoc)
+        dbref.put('$db', '1')
+        dbrefDoc.put('dbref', dbref)
+        getCollectionHelper().insertDocuments(dbrefDoc)
+
+        then:
+        find(not(eq('dbref', dbref))) == [a, b, c]
+
+        when:
+        def subDoc = Document.parse('{x: 1, b: 1}')
+        getCollectionHelper().insertDocuments(new Document('subDoc', subDoc))
+
+        then:
+        find(not(eq('subDoc', subDoc))) == [a, b, c, dbrefDoc]
+
+        when:
+        find(not(and(eq('x', 1), eq('x', 1))))
 
         then:
         thrown MongoQueryException
@@ -190,18 +219,97 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
         find(size('a', 4)) == [b]
     }
 
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $bitsAllClear'() {
+        when:
+        def bitDoc = Document.parse('{_id: 1, bits: 20}')
+        getCollectionHelper().drop()
+        getCollectionHelper().insertDocuments(bitDoc)
+
+        then:
+        find(bitsAllClear('bits', 35)) == [bitDoc]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $bitsAllSet'() {
+        when:
+        def bitDoc = Document.parse('{_id: 1, bits: 54}')
+        getCollectionHelper().drop()
+        getCollectionHelper().insertDocuments(bitDoc)
+
+        then:
+        find(bitsAllSet('bits', 50)) == [bitDoc]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $bitsAnyClear'() {
+        when:
+        def bitDoc = Document.parse('{_id: 1, bits: 50}')
+        getCollectionHelper().drop()
+        getCollectionHelper().insertDocuments(bitDoc)
+
+        then:
+        find(bitsAnyClear('bits', 20)) == [bitDoc]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $bitsAnySet'() {
+        when:
+        def bitDoc = Document.parse('{_id: 1, bits: 20}')
+        getCollectionHelper().drop()
+        getCollectionHelper().insertDocuments(bitDoc)
+
+        then:
+        find(bitsAnySet('bits', 50)) == [bitDoc]
+    }
+
     def 'should render $type'() {
         expect:
         find(type('x', BsonType.INT32)) == [a, b, c]
         find(type('x', BsonType.ARRAY)) == []
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
-    def 'should render $text'() {
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $type with a string type representation'() {
         expect:
-        find(text('I love MongoDB')) == []
-        find(text('I love MongoDB', 'English')) == []
+        find(type('x', 'number')) == [a, b, c]
+        find(type('x', 'array')) == []
     }
+
+    @SuppressWarnings('deprecated')
+    def 'should render $text'() {
+        given:
+        getCollectionHelper().createIndex(new Document('y', 'text'))
+
+        when:
+        def textDocument = new Document('_id', 4).append('y', 'mongoDB for GIANT ideas')
+        collectionHelper.insertDocuments(textDocument)
+
+        then:
+        find(text('GIANT')) == [textDocument]
+        find(text('GIANT', 'english')) == [textDocument]
+        find(text('GIANT', new TextSearchOptions().language('english'))) == [textDocument]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 2) })
+    def 'should render $text with 3.2 options'() {
+        given:
+        collectionHelper.drop()
+        getCollectionHelper().createIndex(new Document('desc', 'text'), 'portuguese')
+
+        when:
+        def textDocument = new Document('_id', 1).append('desc', 'mongodb para idéias GIGANTES')
+        collectionHelper.insertDocuments(textDocument)
+
+        then:
+        find(text('idéias')) == [textDocument]
+        find(text('ideias', new TextSearchOptions())) == [textDocument]
+        find(text('ideias', new TextSearchOptions().caseSensitive(false).diacriticSensitive(false))) == [textDocument]
+        find(text('IDéIAS', new TextSearchOptions().caseSensitive(false).diacriticSensitive(true))) == [textDocument]
+        find(text('ideias', new TextSearchOptions().caseSensitive(true).diacriticSensitive(true))) == []
+        find(text('idéias', new TextSearchOptions().language('english'))) == []
+    }
+
 
     def 'should render $regex'() {
         expect:
@@ -213,5 +321,18 @@ class FiltersFunctionalSpecification extends OperationFunctionalSpecification {
     def 'should render $where'() {
         expect:
         find(where('Array.isArray(this.a)')) == [a, b]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 6) })
+    def '$expr'() {
+        expect:
+        find(expr(Document.parse('{ $eq: [ "$x" , 3 ] } '))) == [c]
+    }
+
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 6) })
+    def '$jsonSchema'() {
+        expect:
+        find(jsonSchema(Document.parse('{ bsonType : "object", properties: { x : {type : "number", minimum : 2} } } '))) == [b, c]
     }
 }

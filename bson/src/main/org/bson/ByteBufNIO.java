@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.bson;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,7 +36,7 @@ public class ByteBufNIO implements ByteBuf {
      * @param buf the {@code ByteBuffer} to wrap.
      */
     public ByteBufNIO(final ByteBuffer buf) {
-        this.buf = buf;
+        this.buf = buf.order(ByteOrder.LITTLE_ENDIAN);
     }
 
     @Override
@@ -98,7 +99,7 @@ public class ByteBufNIO implements ByteBuf {
 
     @Override
     public ByteBuf flip() {
-        buf.flip();
+        ((Buffer) buf).flip();
         return this;
     }
 
@@ -114,13 +115,13 @@ public class ByteBufNIO implements ByteBuf {
 
     @Override
     public ByteBuf position(final int newPosition) {
-        buf.position(newPosition);
+        ((Buffer) buf).position(newPosition);
         return this;
     }
 
     @Override
     public ByteBuf clear() {
-        buf.clear();
+        ((Buffer) buf).clear();
         return this;
     }
 
@@ -136,9 +137,19 @@ public class ByteBufNIO implements ByteBuf {
     }
 
     @Override
+    public byte get(final int index) {
+        return buf.get(index);
+    }
+
+    @Override
     public ByteBuf get(final byte[] bytes) {
         buf.get(bytes);
         return this;
+    }
+
+    @Override
+    public ByteBuf get(final int index, final byte[] bytes) {
+        return get(index, bytes, 0, bytes.length);
     }
 
     @Override
@@ -148,8 +159,21 @@ public class ByteBufNIO implements ByteBuf {
     }
 
     @Override
+    public ByteBuf get(final int index, final byte[] bytes, final int offset, final int length) {
+        for (int i = 0; i < length; i++) {
+            bytes[offset + i] = buf.get(index + i);
+        }
+        return this;
+    }
+
+    @Override
     public long getLong() {
         return buf.getLong();
+    }
+
+    @Override
+    public long getLong(final int index) {
+        return buf.getLong(index);
     }
 
     @Override
@@ -158,8 +182,18 @@ public class ByteBufNIO implements ByteBuf {
     }
 
     @Override
+    public double getDouble(final int index) {
+        return buf.getDouble(index);
+    }
+
+    @Override
     public int getInt() {
         return buf.getInt();
+    }
+
+    @Override
+    public int getInt(final int index) {
+        return buf.getInt(index);
     }
 
     @Override
@@ -169,7 +203,7 @@ public class ByteBufNIO implements ByteBuf {
 
     @Override
     public ByteBuf limit(final int newLimit) {
-        buf.limit(newLimit);
+        ((Buffer) buf).limit(newLimit);
         return this;
     }
 

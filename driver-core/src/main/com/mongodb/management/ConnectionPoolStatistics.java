@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,14 @@ package com.mongodb.management;
 
 import com.mongodb.ServerAddress;
 import com.mongodb.connection.ConnectionPoolSettings;
-import com.mongodb.event.ConnectionEvent;
+import com.mongodb.event.ConnectionAddedEvent;
+import com.mongodb.event.ConnectionCheckedInEvent;
+import com.mongodb.event.ConnectionCheckedOutEvent;
 import com.mongodb.event.ConnectionPoolListenerAdapter;
 import com.mongodb.event.ConnectionPoolOpenedEvent;
-import com.mongodb.event.ConnectionPoolWaitQueueEvent;
+import com.mongodb.event.ConnectionPoolWaitQueueEnteredEvent;
+import com.mongodb.event.ConnectionPoolWaitQueueExitedEvent;
+import com.mongodb.event.ConnectionRemovedEvent;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -35,7 +39,7 @@ final class ConnectionPoolStatistics extends ConnectionPoolListenerAdapter imple
     private final AtomicInteger checkedOutCount = new AtomicInteger();
     private final AtomicInteger waitQueueSize = new AtomicInteger();
 
-    public ConnectionPoolStatistics(final ConnectionPoolOpenedEvent event) {
+    ConnectionPoolStatistics(final ConnectionPoolOpenedEvent event) {
         serverAddress = event.getServerId().getAddress();
         settings = event.getSettings();
     }
@@ -76,32 +80,32 @@ final class ConnectionPoolStatistics extends ConnectionPoolListenerAdapter imple
     }
 
     @Override
-    public void connectionCheckedOut(final ConnectionEvent event) {
+    public void connectionCheckedOut(final ConnectionCheckedOutEvent event) {
         checkedOutCount.incrementAndGet();
     }
 
     @Override
-    public void connectionCheckedIn(final ConnectionEvent event) {
+    public void connectionCheckedIn(final ConnectionCheckedInEvent event) {
         checkedOutCount.decrementAndGet();
     }
 
     @Override
-    public void connectionAdded(final ConnectionEvent event) {
+    public void connectionAdded(final ConnectionAddedEvent event) {
         size.incrementAndGet();
     }
 
     @Override
-    public void connectionRemoved(final ConnectionEvent event) {
+    public void connectionRemoved(final ConnectionRemovedEvent event) {
         size.decrementAndGet();
     }
 
     @Override
-    public void waitQueueEntered(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueEntered(final ConnectionPoolWaitQueueEnteredEvent event) {
         waitQueueSize.incrementAndGet();
     }
 
     @Override
-    public void waitQueueExited(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueExited(final ConnectionPoolWaitQueueExitedEvent event) {
         waitQueueSize.decrementAndGet();
     }
 }

@@ -1,12 +1,13 @@
-baseurl = "/mongo-java-driver/3.1"
+baseURL = "/mongo-java-driver/3.11"
 languageCode = "en-us"
 title = "MongoDB Java Driver"
 theme = "mongodb"
-canonifyurls = false
+canonifyURLs = false
+disableHugoGeneratorInject = true
+disableKinds = ["section", "taxonomy", "taxonomyTerm", "404"]
 
 [blackfriday]
   plainIdAnchors = true
-
 
 # Update versions in mongodb.toml as well
 [[menu.main]]
@@ -14,7 +15,7 @@ canonifyurls = false
     pre = "<i class='fa fa-file-text-o'></i>"
     weight = 90
     identifier = "apiDocs"
-    url = "http://api.mongodb.org/java/3.1"
+    url = "/javadoc"
 
 [[menu.main]]
     name = "Source Code"

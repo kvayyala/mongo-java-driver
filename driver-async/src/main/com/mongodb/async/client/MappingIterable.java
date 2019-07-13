@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,27 +18,32 @@ package com.mongodb.async.client;
 
 import com.mongodb.Block;
 import com.mongodb.Function;
-import com.mongodb.async.SingleResultCallback;
 import com.mongodb.async.AsyncBatchCursor;
+import com.mongodb.async.SingleResultCallback;
 
 import java.util.Collection;
 
-class MappingIterable<T, U> implements MongoIterable<U> {
-    private final MongoIterable<T> iterable;
-    private final Function<T, U> mapper;
+import static com.mongodb.assertions.Assertions.notNull;
 
-    public MappingIterable(final MongoIterable<T> iterable, final Function<T, U> mapper) {
-        this.iterable = iterable;
-        this.mapper = mapper;
+class MappingIterable<U, V> implements MongoIterable<V> {
+    private final MongoIterable<U> iterable;
+    private final Function<U, V> mapper;
+
+    MappingIterable(final MongoIterable<U> iterable, final Function<U, V> mapper) {
+        this.iterable = notNull("iterable", iterable);
+        this.mapper = notNull("mapper", mapper);
     }
 
     @Override
-    public void first(final SingleResultCallback<U> callback) {
-        iterable.first(new SingleResultCallback<T>() {
+    public void first(final SingleResultCallback<V> callback) {
+        notNull("callback", callback);
+        iterable.first(new SingleResultCallback<U>() {
             @Override
-            public void onResult(final T result, final Throwable t) {
+            public void onResult(final U result, final Throwable t) {
                 if (t != null) {
                     callback.onResult(null, t);
+                } else if (result == null) {
+                    callback.onResult(null, null);
                 } else {
                     callback.onResult(mapper.apply(result), null);
                 }
@@ -47,10 +52,12 @@ class MappingIterable<T, U> implements MongoIterable<U> {
     }
 
     @Override
-    public void forEach(final Block<? super U> block, final SingleResultCallback<Void> callback) {
-        iterable.forEach(new Block<T>() {
+    public void forEach(final Block<? super V> block, final SingleResultCallback<Void> callback) {
+        notNull("block", block);
+        notNull("callback", callback);
+        iterable.forEach(new Block<U>() {
             @Override
-            public void apply(final T t) {
+            public void apply(final U t) {
                 block.apply(mapper.apply(t));
             }
         }, new SingleResultCallback<Void>() {
@@ -66,10 +73,12 @@ class MappingIterable<T, U> implements MongoIterable<U> {
     }
 
     @Override
-    public <A extends Collection<? super U>> void into(final A target, final SingleResultCallback<A> callback) {
-        iterable.forEach(new Block<T>() {
+    public <A extends Collection<? super V>> void into(final A target, final SingleResultCallback<A> callback) {
+        notNull("target", target);
+        notNull("callback", callback);
+        iterable.forEach(new Block<U>() {
             @Override
-            public void apply(final T t) {
+            public void apply(final U t) {
                 target.add(mapper.apply(t));
             }
         }, new SingleResultCallback<Void>() {
@@ -85,27 +94,37 @@ class MappingIterable<T, U> implements MongoIterable<U> {
     }
 
     @Override
-    public <V> MongoIterable<V> map(final Function<U, V> mapper) {
-        return new MappingIterable<U, V>(this, mapper);
+    public <W> MongoIterable<W> map(final Function<V, W> mapper) {
+        return new MappingIterable<V, W>(this, mapper);
     }
 
     @Override
-    public MongoIterable<U> batchSize(final int batchSize) {
+    public MongoIterable<V> batchSize(final int batchSize) {
         iterable.batchSize(batchSize);
         return this;
     }
 
     @Override
-    public void batchCursor(final SingleResultCallback<AsyncBatchCursor<U>> callback) {
-        iterable.batchCursor(new SingleResultCallback<AsyncBatchCursor<T>>() {
+    public Integer getBatchSize() {
+        return iterable.getBatchSize();
+    }
+
+    @Override
+    public void batchCursor(final SingleResultCallback<AsyncBatchCursor<V>> callback) {
+        notNull("callback", callback);
+        iterable.batchCursor(new SingleResultCallback<AsyncBatchCursor<U>>() {
             @Override
-            public void onResult(final AsyncBatchCursor<T> batchCursor, final Throwable t) {
+            public void onResult(final AsyncBatchCursor<U> batchCursor, final Throwable t) {
                 if (t != null) {
                     callback.onResult(null, t);
                 } else {
-                    callback.onResult(new MappingAsyncBatchCursor<T, U>(batchCursor, mapper), null);
+                    callback.onResult(new MappingAsyncBatchCursor<U, V>(batchCursor, mapper), null);
                 }
             }
         });
+    }
+
+    MongoIterable<U> getMapped() {
+        return iterable;
     }
 }

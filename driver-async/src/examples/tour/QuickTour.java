@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
+import static com.mongodb.client.model.Accumulators.sum;
+import static com.mongodb.client.model.Aggregates.group;
+import static com.mongodb.client.model.Aggregates.match;
+import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.exists;
@@ -46,9 +50,13 @@ import static com.mongodb.client.model.Filters.lt;
 import static com.mongodb.client.model.Filters.lte;
 import static com.mongodb.client.model.Projections.excludeId;
 import static com.mongodb.client.model.Sorts.descending;
+import static com.mongodb.client.model.Updates.inc;
+import static com.mongodb.client.model.Updates.set;
+import static java.util.Arrays.asList;
+import static java.util.Collections.singletonList;
 
 /**
- * The QuickTour code example see: https://mongodb.github.io/mongo-java-driver/3.0/getting-started
+ * The QuickTour code example
  */
 public class QuickTour {
     /**
@@ -111,18 +119,20 @@ public class QuickTour {
             documents.add(new Document("i", i));
         }
 
+        final CountDownLatch countLatch = new CountDownLatch(1);
         collection.insertMany(documents, new SingleResultCallback<Void>() {
             @Override
             public void onResult(final Void result, final Throwable t) {
-                collection.count(new SingleResultCallback<Long>() {
+                collection.countDocuments(new SingleResultCallback<Long>() {
                     @Override
                     public void onResult(final Long count, final Throwable t) {
                         System.out.println("total # of documents after inserting 100 small ones (should be 101) " + count);
+                        countLatch.countDown();
                     }
                 });
             }
         });
-
+        countLatch.await();
 
         // find first
         SingleResultCallback<Document> printDocument = new SingleResultCallback<Document>() {
@@ -165,8 +175,16 @@ public class QuickTour {
         // Projection
         collection.find().projection(excludeId()).first(printDocument);
 
+        // Aggregation
+        collection.aggregate(asList(
+            match(gt("i", 0)),
+            project(Document.parse("{ITimes10: {$multiply: ['$i', 10]}}")))
+        ).forEach(printDocumentBlock, callbackWhenFinished);
+
+        collection.aggregate(singletonList(group(null, sum("total", "$i")))).first(printDocument);
+
         // Update One
-        collection.updateOne(eq("i", 10), new Document("$set", new Document("i", 110)),
+        collection.updateOne(eq("i", 10), set("i", 110),
                 new SingleResultCallback<UpdateResult>() {
                     @Override
                     public void onResult(final UpdateResult result, final Throwable t) {
@@ -175,7 +193,7 @@ public class QuickTour {
                 });
 
         // Update Many
-        collection.updateMany(lt("i", 100), new Document("$inc", new Document("i", 100)),
+        collection.updateMany(lt("i", 100), inc("i", 100),
                 new SingleResultCallback<UpdateResult>() {
                     @Override
                     public void onResult(final UpdateResult result, final Throwable t) {
@@ -233,7 +251,7 @@ public class QuickTour {
                 dropLatch3.countDown();
             }
         });
-        dropLatch2.await();
+        dropLatch3.await();
 
         collection.bulkWrite(writes, new BulkWriteOptions().ordered(false), printBatchResult);
         collection.find().forEach(printDocumentBlock, callbackWhenFinished);

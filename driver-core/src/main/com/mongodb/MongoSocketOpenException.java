@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,5 +33,16 @@ public class MongoSocketOpenException extends MongoSocketException {
      */
     public MongoSocketOpenException(final String message, final ServerAddress address, final Throwable cause) {
         super(message, address, cause);
+    }
+
+    /**
+     * Construct an instance.
+     *
+     * @param message the message
+     * @param address the server address
+     * @since 3.10
+     */
+    public MongoSocketOpenException(final String message, final ServerAddress address) {
+        super(message, address);
     }
 }

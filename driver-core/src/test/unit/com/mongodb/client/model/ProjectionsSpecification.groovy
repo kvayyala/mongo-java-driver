@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -9,19 +9,17 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONObjectITIONS OF ANY KINObject, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
 package com.mongodb.client.model
 
-import org.bson.BsonDocument
-import org.bson.codecs.BsonValueCodecProvider
-import org.bson.codecs.ValueCodecProvider
-import org.bson.conversions.Bson
+
 import spock.lang.Specification
 
+import static com.mongodb.client.model.BsonHelper.toBson
 import static com.mongodb.client.model.Filters.and
 import static com.mongodb.client.model.Filters.eq
 import static com.mongodb.client.model.Projections.computed
@@ -33,10 +31,8 @@ import static com.mongodb.client.model.Projections.include
 import static com.mongodb.client.model.Projections.metaTextScore
 import static com.mongodb.client.model.Projections.slice
 import static org.bson.BsonDocument.parse
-import static org.bson.codecs.configuration.CodecRegistries.fromProviders
 
 class ProjectionsSpecification extends Specification {
-    def registry = fromProviders([new BsonValueCodecProvider(), new ValueCodecProvider()])
 
     def 'include'() {
         expect:
@@ -91,7 +87,27 @@ class ProjectionsSpecification extends Specification {
         toBson(fields(include('x', 'y'), exclude('x'))) == parse('{y : 1, x : 0}')
     }
 
-    def toBson(Bson bson) {
-        bson.toBsonDocument(BsonDocument, registry)
+    def 'should create string representation for include and exclude'() {
+        expect:
+        include(['x', 'y', 'x']).toString() == '{"y": 1, "x": 1}'
+        exclude(['x', 'y', 'x']).toString() == '{"y": 0, "x": 0}'
+        excludeId().toString() == '{"_id": 0}'
+    }
+
+    def 'should create string representation for computed'() {
+        expect:
+        computed('c', '$y').toString() == 'Expression{name=\'c\', expression=$y}'
+    }
+
+    def 'should create string representation for elemMatch with filter'() {
+        expect:
+        elemMatch('x', and(eq('y', 1), eq('z', 2))).toString() ==
+                'ElemMatch Projection{fieldName=\'x\', ' +
+                'filter=And Filter{filters=[Filter{fieldName=\'y\', value=1}, Filter{fieldName=\'z\', value=2}]}}'
+    }
+
+    def 'should create string representation for fields'() {
+        expect:
+        fields(include('x', 'y'), exclude('_id')).toString() == 'Projections{projections=[{"x": 1, "y": 1}, {"_id": 0}]}'
     }
 }

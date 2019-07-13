@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,12 @@ package com.mongodb.operation;
 
 import com.mongodb.MongoNamespace;
 import com.mongodb.WriteConcern;
-import com.mongodb.WriteConcernResult;
-import com.mongodb.async.SingleResultCallback;
-import com.mongodb.bulk.BulkWriteResult;
 import com.mongodb.bulk.UpdateRequest;
 import com.mongodb.bulk.WriteRequest;
-import com.mongodb.connection.AsyncConnection;
-import com.mongodb.connection.Connection;
 
 import java.util.List;
 
+import static com.mongodb.assertions.Assertions.isTrueArgument;
 import static com.mongodb.assertions.Assertions.notNull;
 
 /**
@@ -35,8 +31,24 @@ import static com.mongodb.assertions.Assertions.notNull;
  *
  * @since 3.0
  */
+@Deprecated
 public class UpdateOperation extends BaseWriteOperation {
     private final List<UpdateRequest> updates;
+
+    /**
+     * Construct an instance.
+     *
+     * @param namespace     the database and collection namespace for the operation.
+     * @param ordered       whether the updates are ordered.
+     * @param writeConcern  the write concern for the operation.
+     * @param updates       the update requests.
+     * @deprecated          use {@link #UpdateOperation(MongoNamespace, boolean, WriteConcern, boolean, List)} instead
+     */
+    @Deprecated
+    public UpdateOperation(final MongoNamespace namespace, final boolean ordered, final WriteConcern writeConcern,
+                           final List<UpdateRequest> updates) {
+        this(namespace, ordered, writeConcern, false, updates);
+    }
 
     /**
      * Construct an instance.
@@ -44,12 +56,15 @@ public class UpdateOperation extends BaseWriteOperation {
      * @param namespace the database and collection namespace for the operation.
      * @param ordered whether the updates are ordered.
      * @param writeConcern the write concern for the operation.
+     * @param retryWrites   if writes should be retried if they fail due to a network error.
      * @param updates the update requests.
+     * @since 3.6
      */
     public UpdateOperation(final MongoNamespace namespace, final boolean ordered, final WriteConcern writeConcern,
-                           final List<UpdateRequest> updates) {
-        super(namespace, ordered, writeConcern);
+                           final boolean retryWrites, final List<UpdateRequest> updates) {
+        super(namespace, ordered, writeConcern, retryWrites);
         this.updates = notNull("update", updates);
+        isTrueArgument("updateRequests not empty", !updates.isEmpty());
     }
 
     /**
@@ -62,23 +77,8 @@ public class UpdateOperation extends BaseWriteOperation {
     }
 
     @Override
-    protected WriteConcernResult executeProtocol(final Connection connection) {
-        return connection.update(getNamespace(), isOrdered(), getWriteConcern(), updates);
-    }
-
-    @Override
-    protected void executeProtocolAsync(final AsyncConnection connection, final SingleResultCallback<WriteConcernResult> callback) {
-        connection.updateAsync(getNamespace(), isOrdered(), getWriteConcern(), updates, callback);
-    }
-
-    @Override
-    protected BulkWriteResult executeCommandProtocol(final Connection connection) {
-        return connection.updateCommand(getNamespace(), isOrdered(), getWriteConcern(), updates);
-    }
-
-    @Override
-    protected void executeCommandProtocolAsync(final AsyncConnection connection, final SingleResultCallback<BulkWriteResult> callback) {
-        connection.updateCommandAsync(getNamespace(), isOrdered(), getWriteConcern(), updates, callback);
+    protected List<? extends WriteRequest> getWriteRequests() {
+        return getUpdateRequests();
     }
 
     @Override
@@ -86,13 +86,4 @@ public class UpdateOperation extends BaseWriteOperation {
         return WriteRequest.Type.UPDATE;
     }
 
-    @Override
-    protected int getCount(final BulkWriteResult bulkWriteResult) {
-        return bulkWriteResult.getMatchedCount() + bulkWriteResult.getUpserts().size();
-    }
-
-    @Override
-    protected boolean getUpdatedExisting(final BulkWriteResult bulkWriteResult) {
-        return bulkWriteResult.getMatchedCount() > 0;
-    }
 }

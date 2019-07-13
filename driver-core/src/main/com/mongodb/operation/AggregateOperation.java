@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,39 +17,19 @@
 package com.mongodb.operation;
 
 import com.mongodb.ExplainVerbosity;
-import com.mongodb.Function;
 import com.mongodb.MongoNamespace;
 import com.mongodb.async.AsyncBatchCursor;
 import com.mongodb.async.SingleResultCallback;
-import com.mongodb.binding.AsyncConnectionSource;
 import com.mongodb.binding.AsyncReadBinding;
-import com.mongodb.binding.ConnectionSource;
 import com.mongodb.binding.ReadBinding;
-import com.mongodb.connection.AsyncConnection;
-import com.mongodb.connection.Connection;
-import com.mongodb.connection.ConnectionDescription;
-import com.mongodb.connection.QueryResult;
-import org.bson.BsonArray;
-import org.bson.BsonBoolean;
+import com.mongodb.client.model.Collation;
+import com.mongodb.client.model.AggregationLevel;
 import org.bson.BsonDocument;
-import org.bson.BsonInt32;
-import org.bson.BsonInt64;
-import org.bson.BsonString;
+import org.bson.BsonValue;
 import org.bson.codecs.Decoder;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-
-import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.internal.async.ErrorHandlingResultCallback.errorHandlingCallback;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
-import static com.mongodb.operation.OperationHelper.AsyncCallableWithConnectionAndSource;
-import static com.mongodb.operation.OperationHelper.CallableWithConnectionAndSource;
-import static com.mongodb.operation.OperationHelper.cursorDocumentToQueryResult;
-import static com.mongodb.operation.OperationHelper.releasingCallback;
-import static com.mongodb.operation.OperationHelper.serverIsAtLeastVersionTwoDotSix;
-import static com.mongodb.operation.OperationHelper.withConnection;
 
 /**
  * An operation that executes an aggregation query.
@@ -59,18 +39,9 @@ import static com.mongodb.operation.OperationHelper.withConnection;
  * @mongodb.server.release 2.2
  * @since 3.0
  */
+@Deprecated
 public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCursor<T>>, ReadOperation<BatchCursor<T>> {
-    private static final String RESULT = "result";
-    private static final String FIRST_BATCH = "firstBatch";
-
-    private final MongoNamespace namespace;
-    private final List<BsonDocument> pipeline;
-    private final Decoder<T> decoder;
-    private Boolean allowDiskUse;
-    private Integer batchSize;
-    private long maxTimeMS;
-    private Boolean useCursor;
-
+    private final AggregateOperationImpl<T> wrapped;
     /**
      * Construct a new instance.
      *
@@ -79,9 +50,21 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @param decoder the decoder for the result documents.
      */
     public AggregateOperation(final MongoNamespace namespace, final List<BsonDocument> pipeline, final Decoder<T> decoder) {
-        this.namespace = notNull("namespace", namespace);
-        this.pipeline = notNull("pipeline", pipeline);
-        this.decoder = notNull("decoder", decoder);
+        this(namespace, pipeline, decoder, AggregationLevel.COLLECTION);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param namespace the database and collection namespace for the operation.
+     * @param pipeline the aggregation pipeline.
+     * @param decoder the decoder for the result documents.
+     * @param aggregationLevel the aggregation level
+     * @since 3.10
+     */
+    public AggregateOperation(final MongoNamespace namespace, final List<BsonDocument> pipeline, final Decoder<T> decoder,
+                              final AggregationLevel aggregationLevel) {
+        this.wrapped = new AggregateOperationImpl<T>(namespace, pipeline, decoder, aggregationLevel);
     }
 
     /**
@@ -91,7 +74,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.driver.manual core/aggregation-introduction/#aggregation-pipelines Aggregation Pipeline
      */
     public List<BsonDocument> getPipeline() {
-        return pipeline;
+        return wrapped.getPipeline();
     }
 
     /**
@@ -102,7 +85,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.server.release 2.6
      */
     public Boolean getAllowDiskUse() {
-        return allowDiskUse;
+        return wrapped.getAllowDiskUse();
     }
 
     /**
@@ -114,7 +97,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.server.release 2.6
      */
     public AggregateOperation<T> allowDiskUse(final Boolean allowDiskUse) {
-        this.allowDiskUse = allowDiskUse;
+        wrapped.allowDiskUse(allowDiskUse);
         return this;
     }
 
@@ -125,7 +108,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.driver.manual reference/method/cursor.batchSize/#cursor.batchSize Batch Size
      */
     public Integer getBatchSize() {
-        return batchSize;
+        return wrapped.getBatchSize();
     }
 
     /**
@@ -136,7 +119,37 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.driver.manual reference/method/cursor.batchSize/#cursor.batchSize Batch Size
      */
     public AggregateOperation<T> batchSize(final Integer batchSize) {
-        this.batchSize = batchSize;
+        wrapped.batchSize(batchSize);
+        return this;
+    }
+
+    /**
+     * The maximum amount of time for the server to wait on new documents to satisfy a tailable cursor
+     * query. This only applies to a TAILABLE_AWAIT cursor. When the cursor is not a TAILABLE_AWAIT cursor,
+     * this option is ignored.
+     *
+     * A zero value will be ignored.
+     *
+     * @param timeUnit the time unit to return the result in
+     * @return the maximum await execution time in the given time unit
+     * @mongodb.server.release 3.6
+     * @mongodb.driver.manual reference/method/cursor.maxTimeMS/#cursor.maxTimeMS Max Time
+     */
+    public long getMaxAwaitTime(final TimeUnit timeUnit) {
+        return wrapped.getMaxAwaitTime(timeUnit);
+    }
+
+    /**
+     * Sets the maximum await execution time on the server for this operation.
+     *
+     * @param maxAwaitTime  the max await time.  A value less than one will be ignored, and indicates that the driver should respect the
+     *                      server's default value
+     * @param timeUnit the time unit, which may not be null
+     * @return this
+     * @mongodb.server.release 3.6
+     */
+    public AggregateOperation<T> maxAwaitTime(final long maxAwaitTime, final TimeUnit timeUnit) {
+        wrapped.maxAwaitTime(maxAwaitTime, timeUnit);
         return this;
     }
 
@@ -148,8 +161,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.driver.manual reference/method/cursor.maxTimeMS/#cursor.maxTimeMS Max Time
      */
     public long getMaxTime(final TimeUnit timeUnit) {
-        notNull("timeUnit", timeUnit);
-        return timeUnit.convert(maxTimeMS, TimeUnit.MILLISECONDS);
+        return wrapped.getMaxTime(timeUnit);
     }
 
     /**
@@ -161,8 +173,7 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @mongodb.driver.manual reference/method/cursor.maxTimeMS/#cursor.maxTimeMS Max Time
      */
     public AggregateOperation<T> maxTime(final long maxTime, final TimeUnit timeUnit) {
-        notNull("timeUnit", timeUnit);
-        this.maxTimeMS = TimeUnit.MILLISECONDS.convert(maxTime, timeUnit);
+        wrapped.maxTime(maxTime, timeUnit);
         return this;
     }
 
@@ -173,9 +184,13 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @return whether the server should use a cursor to return results
      * @mongodb.driver.manual reference/command/aggregate/ Aggregation
      * @mongodb.server.release 2.6
+     * @deprecated There is no replacement for this.  Applications can assume that the driver will use a cursor for server versions
+     * that support it (&gt;= 2.6).  The driver will ignore this as of MongoDB 3.6, which does not support inline results for the aggregate
+     * command.
      */
+    @Deprecated
     public Boolean getUseCursor() {
-        return useCursor;
+        return wrapped.getUseCursor();
     }
 
     /**
@@ -185,43 +200,142 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @return this
      * @mongodb.driver.manual reference/command/aggregate/ Aggregation
      * @mongodb.server.release 2.6
+     * @deprecated There is no replacement for this.  Applications can assume that the driver will use a cursor for server versions
+     * that support it (&gt;= 2.6).  The driver will ignore this as of MongoDB 3.6, which does not support inline results for the aggregate
+     * command.
      */
+    @Deprecated
     public AggregateOperation<T> useCursor(final Boolean useCursor) {
-        this.useCursor = useCursor;
+        wrapped.useCursor(useCursor);
+        return this;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.driver.manual reference/command/aggregate/ Aggregation
+     * @mongodb.server.release 3.4
+     */
+    public Collation getCollation() {
+        return wrapped.getCollation();
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.driver.manual reference/command/aggregate/ Aggregation
+     * @mongodb.server.release 3.4
+     */
+    public AggregateOperation<T> collation(final Collation collation) {
+        wrapped.collation(collation);
+        return this;
+    }
+
+    /**
+     * Returns the comment to send with the aggregate. The default is not to include a comment with the aggregation.
+     *
+     * @return the comment
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public String getComment() {
+        return wrapped.getComment();
+    }
+
+    /**
+     * Sets the comment to the aggregation. A null value means no comment is set.
+     *
+     * @param comment the comment
+     * @return this
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public AggregateOperation<T> comment(final String comment) {
+        wrapped.comment(comment);
+        return this;
+    }
+
+    /**
+     * Enables retryable reads if a read fails due to a network error.
+     *
+     * @param retryReads true if reads should be retried
+     * @return this
+     * @since 3.11
+     * @mongodb.server.release 3.6
+     */
+    public AggregateOperation<T> retryReads(final boolean retryReads) {
+        wrapped.retryReads(retryReads);
+        return this;
+    }
+
+    /**
+     * Gets the value for retryable reads. The default is true.
+     *
+     * @return the retryable reads value
+     * @since 3.11
+     */
+    public boolean getRetryReads() {
+        return wrapped.getRetryReads();
+    }
+
+    /**
+     * Returns the hint for which index to use. The default is not to set a hint.
+     *
+     * @return the hint
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public BsonDocument getHint() {
+        BsonValue hint = wrapped.getHint();
+        if (hint == null) {
+            return null;
+        }
+        if (!hint.isDocument()) {
+            throw new IllegalArgumentException("Hint is not a BsonDocument please use the #getHintBsonValue() method. ");
+        }
+        return hint.asDocument();
+    }
+
+    /**
+     * Returns the hint BsonValue for which index to use. The default is not to set a hint.
+     *
+     * <p>Hints can either be a BsonString or a BsonDocument.</p>
+     *
+     * @return the hint
+     * @since 3.8
+     * @mongodb.server.release 3.6
+     */
+    public BsonValue getHintBsonValue() {
+        return wrapped.getHint();
+    }
+
+    /**
+     * Sets the hint for which index to use. A null value means no hint is set.
+     *
+     * @param hint the hint
+     * @return this
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public AggregateOperation<T> hint(final BsonValue hint) {
+        wrapped.hint(hint);
         return this;
     }
 
     @Override
     public BatchCursor<T> execute(final ReadBinding binding) {
-        return withConnection(binding, new CallableWithConnectionAndSource<BatchCursor<T>>() {
-            @Override
-            public BatchCursor<T> call(final ConnectionSource source, final Connection connection) {
-                return executeWrappedCommandProtocol(namespace.getDatabaseName(), asCommandDocument(connection.getDescription()),
-                                                     CommandResultDocumentCodec.create(decoder,
-                                                                                       getFieldNameWithResults(connection
-                                                                                                               .getDescription())),
-                                                     connection, binding.getReadPreference(), transformer(source, connection));
-            }
-        });
+        return wrapped.execute(binding);
     }
 
     @Override
     public void executeAsync(final AsyncReadBinding binding, final SingleResultCallback<AsyncBatchCursor<T>> callback) {
-        withConnection(binding, new AsyncCallableWithConnectionAndSource() {
-            @Override
-            public void call(final AsyncConnectionSource source, final AsyncConnection connection, final Throwable t) {
-                if (t != null) {
-                    errorHandlingCallback(callback).onResult(null, t);
-                } else {
-                    executeWrappedCommandProtocolAsync(namespace.getDatabaseName(), asCommandDocument(connection.getDescription()),
-                                                       CommandResultDocumentCodec.create(decoder,
-                                                                                         getFieldNameWithResults(connection
-                                                                                                                 .getDescription())),
-                                                       connection, binding.getReadPreference(), asyncTransformer(source, connection),
-                                                       releasingCallback(errorHandlingCallback(callback), source, connection));
-                }
-            }
-        });
+        wrapped.executeAsync(binding, callback);
     }
 
     /**
@@ -231,9 +345,11 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @return a read operation that when executed will explain this operation
      */
     public ReadOperation<BsonDocument> asExplainableOperation(final ExplainVerbosity explainVerbosity) {
-        return new AggregateExplainOperation(namespace, pipeline)
-               .allowDiskUse(allowDiskUse)
-               .maxTime(maxTimeMS, TimeUnit.MILLISECONDS);
+        return new AggregateExplainOperation(getNamespace(), getPipeline())
+               .allowDiskUse(getAllowDiskUse())
+               .maxTime(getMaxAwaitTime(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+               .hint(wrapped.getHint())
+               .retryReads(getRetryReads());
     }
 
     /**
@@ -243,66 +359,36 @@ public class AggregateOperation<T> implements AsyncReadOperation<AsyncBatchCurso
      * @return a read operation that when executed will explain this operation
      */
     public AsyncReadOperation<BsonDocument> asExplainableOperationAsync(final ExplainVerbosity explainVerbosity) {
-        return new AggregateExplainOperation(namespace, pipeline)
-               .allowDiskUse(allowDiskUse)
-               .maxTime(maxTimeMS, TimeUnit.MILLISECONDS);
+        return new AggregateExplainOperation(getNamespace(), getPipeline())
+                .retryReads(getRetryReads())
+                .allowDiskUse(getAllowDiskUse())
+                .maxTime(getMaxAwaitTime(TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
+                .hint(wrapped.getHint());
     }
 
-    private boolean isInline(final ConnectionDescription description) {
-        return (useCursor != null && !useCursor) || !serverIsAtLeastVersionTwoDotSix(description);
+
+    MongoNamespace getNamespace() {
+        return wrapped.getNamespace();
     }
 
-    private BsonDocument asCommandDocument(final ConnectionDescription description) {
-        BsonDocument commandDocument = new BsonDocument("aggregate", new BsonString(namespace.getCollectionName()));
-        commandDocument.put("pipeline", new BsonArray(pipeline));
-        if (maxTimeMS > 0) {
-            commandDocument.put("maxTimeMS", new BsonInt64(maxTimeMS));
-        }
-        if ((useCursor == null || useCursor) && serverIsAtLeastVersionTwoDotSix(description)) {
-            BsonDocument cursor = new BsonDocument();
-            if (batchSize != null) {
-                cursor.put("batchSize", new BsonInt32(batchSize));
-            }
-            commandDocument.put("cursor", cursor);
-        }
-        if (allowDiskUse != null) {
-            commandDocument.put("allowDiskUse", BsonBoolean.valueOf(allowDiskUse));
-        }
-        return commandDocument;
+    Decoder<T> getDecoder() {
+        return wrapped.getDecoder();
     }
 
-    String getFieldNameWithResults(final ConnectionDescription description) {
-        return ((useCursor == null || useCursor) && serverIsAtLeastVersionTwoDotSix(description)) ? FIRST_BATCH : RESULT;
-    }
-
-    @SuppressWarnings("unchecked")
-    private QueryResult<T> createQueryResult(final BsonDocument result, final ConnectionDescription description) {
-        if (isInline(description)) {
-            return new QueryResult<T>(namespace, BsonDocumentWrapperHelper.<T>toList(result, RESULT), 0L,
-                                      description.getServerAddress());
-        } else {
-            return cursorDocumentToQueryResult(result.getDocument("cursor"), description.getServerAddress());
-        }
-    }
-
-    private Function<BsonDocument, BatchCursor<T>> transformer(final ConnectionSource source, final Connection connection) {
-        return new Function<BsonDocument, BatchCursor<T>>() {
-            @Override
-            public BatchCursor<T> apply(final BsonDocument result) {
-                QueryResult<T> queryResult = createQueryResult(result, connection.getDescription());
-                return new QueryBatchCursor<T>(queryResult, 0, batchSize != null ? batchSize : 0, decoder, source);
-            }
-        };
-    }
-
-    private Function<BsonDocument, AsyncBatchCursor<T>> asyncTransformer(final AsyncConnectionSource source,
-                                                                         final AsyncConnection connection) {
-        return new Function<BsonDocument, AsyncBatchCursor<T>>() {
-            @Override
-            public AsyncBatchCursor<T> apply(final BsonDocument result) {
-                QueryResult<T> queryResult = createQueryResult(result, connection.getDescription());
-                return new AsyncQueryBatchCursor<T>(queryResult, 0, batchSize != null ? batchSize : 0, decoder, source);
-            }
-        };
+    @Override
+    public String toString() {
+        return "AggregateOperation{"
+                + "namespace=" + getNamespace()
+                + ", pipeline=" + getPipeline()
+                + ", decoder=" + getDecoder()
+                + ", allowDiskUse=" + getAllowDiskUse()
+                + ", batchSize=" + getBatchSize()
+                + ", collation=" + getCollation()
+                + ", comment=" + getComment()
+                + ", hint=" + getHint()
+                + ", maxAwaitTimeMS=" + getMaxAwaitTime(TimeUnit.MILLISECONDS)
+                + ", maxTimeMS=" + getMaxTime(TimeUnit.MILLISECONDS)
+                + ", useCursor=" + wrapped.getUseCursor()
+                + "}";
     }
 }

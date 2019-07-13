@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,9 @@
  */
 
 package com.mongodb.async;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * A SingleResultCallback implementation that saves the result of the callback.
@@ -35,11 +38,19 @@ class CallbackResultHolder<T> implements SingleResultCallback<T> {
      */
     public void onResult(final T result, final Throwable error) {
         if (isDone) {
-            throw new IllegalStateException("The CallbackResult cannot be initialized multiple times.");
+            throw new IllegalStateException("The CallbackResult cannot be initialized multiple times.  The first time it was initialized "
+                    + "with " + (this.error != null ? getErrorString(this.error) : this.result) + "\n The second time it was initialized "
+                    + "with " + (error != null ? getErrorString(error) : result));
         }
         this.result = result;
         this.error = error;
         this.isDone = true;
+    }
+
+    private String getErrorString(final Throwable error) {
+        StringWriter writer = new StringWriter();
+        error.printStackTrace(new PrintWriter(writer));
+        return writer.toString();
     }
 
     /**
@@ -81,9 +92,9 @@ class CallbackResultHolder<T> implements SingleResultCallback<T> {
     @Override
     public String toString() {
         return "CallbackResultHolder{"
-               + "result=" + result
-               + ", error=" + error
-               + ", isDone=" + isDone
-               + '}';
+                + "result=" + result
+                + ", error=" + error
+                + ", isDone=" + isDone
+                + '}';
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,28 +19,38 @@ package com.mongodb
 import spock.lang.Specification
 
 class MongoNamespaceSpecification extends Specification {
-    def 'null database name should throw IllegalArgumentException'() {
+    def 'invalid database name should throw IllegalArgumentException'() {
         when:
-        new MongoNamespace(null, 'test');
+        new MongoNamespace(databaseName, 'test');
 
         then:
         thrown(IllegalArgumentException)
+
+        when:
+        MongoNamespace.checkDatabaseNameValidity(databaseName)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        where:
+        databaseName << [null, '', 'a\0b', 'a b', 'a.b', 'a/b', 'a\\b', 'a"b']
     }
 
-    def 'null collection name should throw IllegalArgumentException'() {
+    def 'invalid collection name should throw IllegalArgumentException'() {
         when:
-        new MongoNamespace('test', null);
+        new MongoNamespace('test', collectionName);
 
         then:
         thrown(IllegalArgumentException)
-    }
 
-    def 'null full name should throw IllegalArgumentException'() {
         when:
-        new MongoNamespace(null)
+        MongoNamespace.checkCollectionNameValidity(collectionName)
 
         then:
         thrown(IllegalArgumentException)
+
+        where:
+        collectionName << [null, '']
     }
 
     def 'invalid full name should throw IllegalArgumentException'() {
@@ -51,7 +61,7 @@ class MongoNamespaceSpecification extends Specification {
         thrown(IllegalArgumentException)
 
         where:
-        fullName << ['db', '.db', 'db.', 'db..coll', 'db.coll.']
+        fullName << [null, '', 'db', '.db', 'db.', 'a .b']
     }
 
     def 'test getters'() {

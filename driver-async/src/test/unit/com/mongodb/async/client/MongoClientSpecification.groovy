@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.async.client
 
+import com.mongodb.ReadConcern
 import com.mongodb.WriteConcern
 import com.mongodb.client.model.geojson.MultiPolygon
 import com.mongodb.connection.Cluster
@@ -27,32 +28,47 @@ import spock.lang.Specification
 import static com.mongodb.CustomMatchers.isTheSameAs
 import static com.mongodb.ReadPreference.primary
 import static com.mongodb.ReadPreference.secondary
+import static com.mongodb.async.client.MongoClients.getDefaultCodecRegistry
+import static com.mongodb.async.client.TestHelper.execute
 import static org.bson.codecs.configuration.CodecRegistries.fromProviders
 import static spock.util.matcher.HamcrestSupport.expect
 
 class MongoClientSpecification extends Specification {
 
-    def 'should use ListCollectionsOperation correctly'() {
+    def 'should use ListDatabasesIterableImpl correctly'() {
         given:
-        def settings = MongoClientSettings.builder().build()
-        def cluster = Stub(Cluster)
-        def executor = new TestOperationExecutor([null, null, null])
-        def client = new MongoClientImpl(settings, cluster, executor)
-        def codecRegistry = MongoClients.getDefaultCodecRegistry()
+        def executor = new TestOperationExecutor([null, null])
+        def client = new MongoClientImpl(MongoClientSettings.builder().build(), Stub(Cluster), executor)
+        def listDatabasesMethod = client.&listDatabases
+        def listDatabasesNamesMethod = client.&listDatabaseNames
 
         when:
-        def listDatabasesIterable = client.listDatabases()
+        def listDatabasesIterable = execute(listDatabasesMethod, session)
 
         then:
-        expect listDatabasesIterable, isTheSameAs(new ListDatabasesIterableImpl<Document>(Document, codecRegistry, primary(),
-                executor))
+        expect listDatabasesIterable, isTheSameAs(new ListDatabasesIterableImpl<Document>(session, Document, getDefaultCodecRegistry(),
+                primary(), executor, true))
 
         when:
-        listDatabasesIterable = client.listDatabases(BsonDocument)
+        listDatabasesIterable = execute(listDatabasesMethod, session, BsonDocument)
 
         then:
-        expect listDatabasesIterable, isTheSameAs(new ListDatabasesIterableImpl<BsonDocument>(BsonDocument, codecRegistry, primary(),
-                executor))
+        expect listDatabasesIterable, isTheSameAs(new ListDatabasesIterableImpl<BsonDocument>(session, BsonDocument,
+                getDefaultCodecRegistry(), primary(), executor, true))
+
+        when:
+        def listDatabaseNamesIterable = execute(listDatabasesNamesMethod, session)
+
+        then:
+        // listDatabaseNamesIterable is an instance of a MappingIterable, so have to get the mapped iterable inside it
+        expect listDatabaseNamesIterable.getMapped(), isTheSameAs(new ListDatabasesIterableImpl<BsonDocument>(session, BsonDocument,
+                getDefaultCodecRegistry(), primary(), executor, true).nameOnly(true))
+
+        cleanup:
+        client?.close()
+
+        where:
+        session << [null, Stub(ClientSession)]
     }
 
     def 'should provide the same settings'() {
@@ -72,29 +88,49 @@ class MongoClientSpecification extends Specification {
         def settings = MongoClientSettings.builder()
                                           .readPreference(secondary())
                                           .writeConcern(WriteConcern.MAJORITY)
+                                          .retryWrites(true)
+                                          .retryReads(true)
+                                          .readConcern(ReadConcern.MAJORITY)
                                           .codecRegistry(codecRegistry)
                                           .build()
         def client = new MongoClientImpl(settings, Stub(Cluster), new TestOperationExecutor([]))
 
         when:
-        def database = client.getDatabase('name');
+        def database = client.getDatabase('name')
 
         then:
         expect database, isTheSameAs(expectedDatabase)
 
         where:
         expectedDatabase << new MongoDatabaseImpl('name', fromProviders([new BsonValueCodecProvider()]), secondary(),
-                WriteConcern.MAJORITY, new TestOperationExecutor([]))
+                WriteConcern.MAJORITY, true, true, ReadConcern.MAJORITY, new TestOperationExecutor([]))
+    }
+
+
+    def 'should cleanly close the external resource closer on close'() {
+        given:
+        def closed = false
+        def client = new MongoClientImpl(MongoClientSettings.builder().build(), Mock(Cluster), {
+            closed = true
+            throw new IOException()
+        })
+
+        when:
+        client.close()
+
+        then:
+        closed
     }
 
     def 'default codec registry should contain all supported providers'() {
         given:
-        def codecRegistry = MongoClients.getDefaultCodecRegistry()
+        def codecRegistry = getDefaultCodecRegistry()
 
         expect:
         codecRegistry.get(BsonDocument)
         codecRegistry.get(Document)
         codecRegistry.get(Integer)
         codecRegistry.get(MultiPolygon)
+        codecRegistry.get(Iterable)
     }
 }

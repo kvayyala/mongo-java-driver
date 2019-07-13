@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -67,6 +69,5 @@ class MultiLineStringSpecification extends Specification {
         'MultiLineString{coordinates=[' +
         '[Position{values=[1.0, 1.0]}, Position{values=[2.0, 2.0]}, Position{values=[3.0, 4.0]}], ' +
         '[Position{values=[2.0, 3.0]}, Position{values=[3.0, 2.0]}, Position{values=[4.0, 4.0]}]]}'
-
     }
 }

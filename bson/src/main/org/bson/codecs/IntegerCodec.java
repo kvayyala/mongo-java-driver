@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,15 @@ package org.bson.codecs;
 import org.bson.BsonReader;
 import org.bson.BsonWriter;
 
+import static org.bson.codecs.NumberCodecHelper.decodeInt;
+
 /**
  * Encodes and decodes {@code Integer} objects.
  *
  * @since 3.0
  */
 public class IntegerCodec implements Codec<Integer> {
+
     @Override
     public void encode(final BsonWriter writer, final Integer value, final EncoderContext encoderContext) {
         writer.writeInt32(value);
@@ -32,7 +35,7 @@ public class IntegerCodec implements Codec<Integer> {
 
     @Override
     public Integer decode(final BsonReader reader, final DecoderContext decoderContext) {
-        return reader.readInt32();
+        return decodeInt(reader);
     }
 
     @Override

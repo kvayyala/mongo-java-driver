@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import org.bson.BsonValue;
 import org.bson.BsonWriter;
 import org.bson.Document;
 import org.bson.Transformer;
-import org.bson.assertions.Assertions;
 import org.bson.codecs.configuration.CodecRegistry;
 
 import java.util.ArrayList;
@@ -34,6 +33,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static java.util.Arrays.asList;
+import static org.bson.assertions.Assertions.notNull;
 import static org.bson.codecs.configuration.CodecRegistries.fromProviders;
 
 /**
@@ -50,16 +50,26 @@ public class DocumentCodec implements CollectibleCodec<Document> {
             new DocumentCodecProvider()));
     private static final BsonTypeClassMap DEFAULT_BSON_TYPE_CLASS_MAP = new BsonTypeClassMap();
 
-    private final BsonTypeClassMap bsonTypeClassMap;
+    private final BsonTypeCodecMap bsonTypeCodecMap;
     private final CodecRegistry registry;
     private final IdGenerator idGenerator;
     private final Transformer valueTransformer;
 
     /**
-     * Construct a new instance with a default {@code CodecRegistry} and
+     * Construct a new instance with a default {@code CodecRegistry}.
      */
     public DocumentCodec() {
-        this(DEFAULT_REGISTRY, DEFAULT_BSON_TYPE_CLASS_MAP);
+        this(DEFAULT_REGISTRY);
+    }
+
+    /**
+     * Construct a new instance with the given registry.
+     *
+     * @param registry         the registry
+     * @since 3.5
+     */
+    public DocumentCodec(final CodecRegistry registry) {
+        this(registry, DEFAULT_BSON_TYPE_CLASS_MAP);
     }
 
     /**
@@ -82,9 +92,9 @@ public class DocumentCodec implements CollectibleCodec<Document> {
      * @param valueTransformer the value transformer to use as a final step when decoding the value of any field in the document
      */
     public DocumentCodec(final CodecRegistry registry, final BsonTypeClassMap bsonTypeClassMap, final Transformer valueTransformer) {
-        this.registry = Assertions.notNull("registry", registry);
-        this.bsonTypeClassMap = Assertions.notNull("bsonTypeClassMap", bsonTypeClassMap);
-        this.idGenerator = Assertions.notNull("idGenerator", new ObjectIdGenerator());
+        this.registry = notNull("registry", registry);
+        this.bsonTypeCodecMap = new BsonTypeCodecMap(notNull("bsonTypeClassMap", bsonTypeClassMap), registry);
+        this.idGenerator = new ObjectIdGenerator();
         this.valueTransformer = valueTransformer != null ? valueTransformer : new Transformer() {
             @Override
             public Object transform(final Object value) {
@@ -166,9 +176,9 @@ public class DocumentCodec implements CollectibleCodec<Document> {
     private void writeValue(final BsonWriter writer, final EncoderContext encoderContext, final Object value) {
         if (value == null) {
             writer.writeNull();
-        } else if (Iterable.class.isAssignableFrom(value.getClass())) {
+        } else if (value instanceof Iterable) {
             writeIterable(writer, (Iterable<Object>) value, encoderContext.getChildContext());
-        } else if (Map.class.isAssignableFrom(value.getClass())) {
+        } else if (value instanceof Map) {
             writeMap(writer, (Map<String, Object>) value, encoderContext.getChildContext());
         } else {
             Codec codec = registry.get(value.getClass());
@@ -205,14 +215,11 @@ public class DocumentCodec implements CollectibleCodec<Document> {
             reader.readNull();
             return null;
         } else if (bsonType == BsonType.ARRAY) {
-           return readList(reader, decoderContext);
-        } else if (bsonType == BsonType.BINARY) {
-            byte bsonSubType = reader.peekBinarySubType();
-            if (bsonSubType == BsonBinarySubType.UUID_STANDARD.getValue() || bsonSubType == BsonBinarySubType.UUID_LEGACY.getValue()) {
-                return registry.get(UUID.class).decode(reader, decoderContext);
-            }
+            return readList(reader, decoderContext);
+        } else if (bsonType == BsonType.BINARY && BsonBinarySubType.isUuid(reader.peekBinarySubType()) && reader.peekBinarySize() == 16) {
+            return registry.get(UUID.class).decode(reader, decoderContext);
         }
-        return valueTransformer.transform(registry.get(bsonTypeClassMap.get(bsonType)).decode(reader, decoderContext));
+        return valueTransformer.transform(bsonTypeCodecMap.get(bsonType).decode(reader, decoderContext));
     }
 
     private List<Object> readList(final BsonReader reader, final DecoderContext decoderContext) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,26 @@
  * limitations under the License.
  */
 
-apply plugin: 'osgi'
-apply plugin: 'org.kordamp.gradle.clirr'
-
-def configDir = new File(rootDir, 'config')
 archivesBaseName = 'bson'
+description = 'The BSON library'
+
+ext {
+    pomName = 'BSON'
+    pomURL = 'https://bsonspec.org'
+}
 
 clirr {
     excludeFilter = new File("$configDir/clirr-exclude.yml")
-    baseline 'org.mongodb:bson:3.0.0'
-    failOnErrors = false
+    baseline 'org.mongodb:bson:3.8.0'
+    failOnErrors = true
 }
 
 jar {
     manifest {
+        instruction 'Automatic-Module-Name', 'org.mongodb.bson'
+        instruction 'Build-Version', project.gitVersion
         instruction 'Import-Package',
                     'javax.xml.bind.*',
                     'org.slf4j;resolution:=optional'
-    }
-}
-
-modifyPom {
-    project {
-        name 'BSON'
-        description 'The BSON library'
-        url 'http://bsonspec.org'
     }
 }

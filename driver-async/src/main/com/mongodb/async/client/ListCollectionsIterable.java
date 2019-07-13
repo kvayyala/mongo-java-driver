@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.async.client;
 
+import com.mongodb.lang.Nullable;
 import org.bson.conversions.Bson;
 
 import java.util.concurrent.TimeUnit;
@@ -25,7 +26,9 @@ import java.util.concurrent.TimeUnit;
  *
  * @param <TResult> The type of the result.
  * @since 3.0
+ * @deprecated Prefer the Reactive Streams-based asynchronous driver (mongodb-driver-reactivestreams artifactId)
  */
+@Deprecated
 public interface ListCollectionsIterable<TResult> extends MongoIterable<TResult> {
 
     /**
@@ -35,7 +38,7 @@ public interface ListCollectionsIterable<TResult> extends MongoIterable<TResult>
      * @return this
      * @mongodb.driver.manual reference/method/db.collection.find/ Filter
      */
-    ListCollectionsIterable<TResult> filter(Bson filter);
+    ListCollectionsIterable<TResult> filter(@Nullable Bson filter);
 
     /**
      * Sets the maximum execution time on the server for this operation.

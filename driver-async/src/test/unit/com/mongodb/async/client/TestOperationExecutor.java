@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 package com.mongodb.async.client;
 
+import com.mongodb.ReadConcern;
 import com.mongodb.ReadPreference;
 import com.mongodb.async.SingleResultCallback;
-import com.mongodb.operation.AsyncOperationExecutor;
+import com.mongodb.lang.Nullable;
 import com.mongodb.operation.AsyncReadOperation;
 import com.mongodb.operation.AsyncWriteOperation;
 
@@ -26,10 +27,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 @SuppressWarnings({ "rawtypes", "unchecked" })
-public class TestOperationExecutor implements AsyncOperationExecutor {
+public class TestOperationExecutor implements OperationExecutor {
 
     private final List<Object> responses;
     private final boolean queueExecution;
+    private List<ClientSession> clientSessions = new ArrayList<ClientSession>();
     private final List<ReadPreference> readPreferences = new ArrayList<ReadPreference>();
     private final List<AsyncReadOperation> queuedReadOperations = new ArrayList<AsyncReadOperation>();
     private final List<AsyncWriteOperation> queuedWriteOperations = new ArrayList<AsyncWriteOperation>();
@@ -48,9 +50,16 @@ public class TestOperationExecutor implements AsyncOperationExecutor {
     }
 
     @Override
-    public <T> void execute(final AsyncReadOperation<T> operation, final ReadPreference readPreference,
+    public <T> void execute(final AsyncReadOperation<T> operation, final ReadPreference readPreference, final ReadConcern readConcern,
                             final SingleResultCallback<T> callback) {
+        execute(operation, readPreference, readConcern, null, callback);
+    }
+
+    @Override
+    public <T> void execute(final AsyncReadOperation<T> operation, final ReadPreference readPreference, final ReadConcern readConcern,
+                            final ClientSession session, final SingleResultCallback<T> callback) {
         readPreferences.add(readPreference);
+        clientSessions.add(session);
         if (queueExecution) {
             queuedReadOperations.add(operation);
             queuedReadCallbacks.add(callback);
@@ -62,7 +71,14 @@ public class TestOperationExecutor implements AsyncOperationExecutor {
 
 
     @Override
-    public <T> void execute(final AsyncWriteOperation<T> operation, final SingleResultCallback<T> callback) {
+    public <T> void execute(final AsyncWriteOperation<T> operation, final ReadConcern readConcern, final SingleResultCallback<T> callback) {
+        execute(operation, readConcern, null, callback);
+    }
+
+    @Override
+    public <T> void execute(final AsyncWriteOperation<T> operation, final ReadConcern readConcern, final ClientSession session,
+                            final SingleResultCallback<T> callback) {
+        clientSessions.add(session);
         if (queueExecution) {
             queuedWriteOperations.add(operation);
             queuedWriteCallbacks.add(callback);
@@ -91,16 +107,23 @@ public class TestOperationExecutor implements AsyncOperationExecutor {
         }
     }
 
+    @Nullable
+    ClientSession getClientSession() {
+        return clientSessions.isEmpty() ? null : clientSessions.remove(0);
+    }
+
+    @Nullable
     AsyncReadOperation getReadOperation() {
         return readOperations.isEmpty() ? null : readOperations.remove(0);
     }
 
+    @Nullable
     ReadPreference getReadPreference() {
         return readPreferences.isEmpty() ? null : readPreferences.remove(0);
     }
 
+    @Nullable
     AsyncWriteOperation getWriteOperation() {
         return writeOperations.isEmpty() ? null : writeOperations.remove(0);
     }
-
 }

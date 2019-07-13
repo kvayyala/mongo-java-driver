@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,17 @@
 
 package org.bson;
 
+import org.bson.types.Decimal128;
 import org.bson.types.ObjectId;
+
+import java.io.Closeable;
 
 /**
  * An interface for reading a logical BSON document using a pull-oriented API.
  *
  * @since 3.0
  */
-public interface BsonReader {
+public interface BsonReader extends Closeable {
     /**
      * @return The current BsonType.
      */
@@ -50,6 +53,15 @@ public interface BsonReader {
      * @see #mark()
      */
     byte peekBinarySubType();
+
+    /**
+     * Peeks the size of the binary data that the reader is positioned at.  This operation is not permitted if the mark is already set.
+     *
+     * @return the size of the binary data
+     * @see #mark()
+     * @since 3.4
+     */
+    int peekBinarySize();
 
     /**
      * Reads a BSON Binary data element from the reader.
@@ -150,6 +162,23 @@ public interface BsonReader {
      * @return An Int64.
      */
     long readInt64(String name);
+
+    /**
+     * Reads a BSON Decimal128 from the reader.
+     *
+     * @return A Decimal128
+     * @since 3.4
+     */
+    Decimal128 readDecimal128();
+
+    /**
+     * Reads a BSON Decimal128 element from the reader.
+     *
+     * @param name The name of the element.
+     * @return A Decimal128
+     * @since 3.4
+     */
+    Decimal128 readDecimal128(String name);
 
     /**
      * Reads a BSON JavaScript from the reader.
@@ -357,13 +386,28 @@ public interface BsonReader {
      * Creates a bookmark in the BsonReader's input
      *
      * The previous mark must be cleared before creating a new one
+     * @deprecated Use {@link #getMark()} instead
      */
+    @Deprecated
     void mark();
+
+    /**
+     * Gets a mark representing the current state of the reader.
+     *
+     * @return the mark
+     * @since 3.5
+     */
+    BsonReaderMark getMark();
 
     /**
      * Go back to the state at the last mark and removes the mark
      *
      * @throws org.bson.BSONException if no mark has been set
+     * @deprecated Prefer {@link #getMark()}
      */
+    @Deprecated
     void reset();
+
+    @Override
+    void close();
 }

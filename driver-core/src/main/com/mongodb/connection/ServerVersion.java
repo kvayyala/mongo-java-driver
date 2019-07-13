@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import static com.mongodb.assertions.Assertions.notNull;
 import static java.util.Arrays.asList;
 
 /**
- * Holds an array of three integers representing the server version, e.g. [2, 4, 1].
+ * Holds an array of three integers representing the server version, e.g. [3, 4, 1].
  *
  * @since 3.0
  */

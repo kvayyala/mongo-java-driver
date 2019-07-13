@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 
 package org.bson;
 
-import java.io.Serializable;
+import org.bson.types.Decimal128;
 
 /**
  * A representation of the BSON Int64 type.
  */
-public final class BsonInt64 extends BsonNumber implements Comparable<BsonInt64>, Serializable {
-    private static final long serialVersionUID = 2215506922933899945L;
+public final class BsonInt64 extends BsonNumber implements Comparable<BsonInt64> {
 
     private final long value;
 
@@ -68,6 +67,11 @@ public final class BsonInt64 extends BsonNumber implements Comparable<BsonInt64>
     @Override
     public double doubleValue() {
         return value;
+    }
+
+    @Override
+    public Decimal128 decimal128Value() {
+        return new Decimal128(value);
     }
 
     @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import com.mongodb.connection.ServerDescription;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.connection.ClusterConnectionMode.MULTIPLE;
@@ -33,6 +32,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
  *
  * @since 3.0
  */
+@Deprecated
 public class LatencyMinimizingServerSelector implements ServerSelector {
 
     private final long acceptableLatencyDifferenceNanos;
@@ -58,12 +58,13 @@ public class LatencyMinimizingServerSelector implements ServerSelector {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public List<ServerDescription> select(final ClusterDescription clusterDescription) {
         if (clusterDescription.getConnectionMode() != MULTIPLE) {
             return clusterDescription.getAny();
         } else {
             return getServersWithAcceptableLatencyDifference(clusterDescription.getAny(),
-                                                             getFastestRoundTripTimeNanos(clusterDescription.getAll()));
+                                                             getFastestRoundTripTimeNanos(clusterDescription.getServerDescriptions()));
         }
     }
 
@@ -74,7 +75,25 @@ public class LatencyMinimizingServerSelector implements ServerSelector {
                + '}';
     }
 
-    private long getFastestRoundTripTimeNanos(final Set<ServerDescription> members) {
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        LatencyMinimizingServerSelector that = (LatencyMinimizingServerSelector) o;
+        return acceptableLatencyDifferenceNanos == that.acceptableLatencyDifferenceNanos;
+    }
+
+    @Override
+    public int hashCode() {
+        return (int) (acceptableLatencyDifferenceNanos ^ (acceptableLatencyDifferenceNanos >>> 32));
+    }
+
+    private long getFastestRoundTripTimeNanos(final List<ServerDescription> members) {
         long fastestRoundTripTime = Long.MAX_VALUE;
         for (final ServerDescription cur : members) {
             if (!cur.isOk()) {

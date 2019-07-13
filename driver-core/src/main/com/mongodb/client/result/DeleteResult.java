@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package com.mongodb.client.result;
 
 /**
  * The result of a delete operation. If the delete was unacknowledged, then {@code wasAcknowledged} will return false and all other methods
- * with throw {@code UnsupportedOperationException}.
+ * will throw {@code UnsupportedOperationException}.
  *
  * @see com.mongodb.WriteConcern#UNACKNOWLEDGED
  * @since 3.0
@@ -62,7 +62,7 @@ public abstract class DeleteResult {
     private static class AcknowledgedDeleteResult extends DeleteResult {
         private final long deletedCount;
 
-        public AcknowledgedDeleteResult(final long deletedCount) {
+        AcknowledgedDeleteResult(final long deletedCount) {
             this.deletedCount = deletedCount;
         }
 

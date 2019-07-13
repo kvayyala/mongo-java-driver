@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,10 @@ import com.mongodb.connection.AsyncConnection;
 import com.mongodb.connection.Cluster;
 import com.mongodb.connection.Server;
 import com.mongodb.connection.ServerDescription;
-import com.mongodb.selector.PrimaryServerSelector;
+import com.mongodb.internal.connection.NoOpSessionContext;
 import com.mongodb.selector.ReadPreferenceServerSelector;
+import com.mongodb.selector.WritableServerSelector;
+import com.mongodb.session.SessionContext;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -71,7 +73,7 @@ public class AsyncSingleConnectionBinding extends AbstractReferenceCounted imple
         notNull("cluster", cluster);
         this.readPreference = notNull("readPreference", readPreference);
         final CountDownLatch latch = new CountDownLatch(2);
-        cluster.selectServerAsync(new PrimaryServerSelector(), new SingleResultCallback<Server>() {
+        cluster.selectServerAsync(new WritableServerSelector(), new SingleResultCallback<Server>() {
             @Override
             public void onResult(final Server result, final Throwable t) {
                 if (t == null) {
@@ -149,6 +151,11 @@ public class AsyncSingleConnectionBinding extends AbstractReferenceCounted imple
     }
 
     @Override
+    public SessionContext getSessionContext() {
+        return NoOpSessionContext.INSTANCE;
+    }
+
+    @Override
     public void getReadConnectionSource(final SingleResultCallback<AsyncConnectionSource> callback) {
         isTrue("open", getCount() > 0);
         if (readPreference == primary()) {
@@ -186,6 +193,11 @@ public class AsyncSingleConnectionBinding extends AbstractReferenceCounted imple
         @Override
         public ServerDescription getServerDescription() {
             return server.getDescription();
+        }
+
+        @Override
+        public SessionContext getSessionContext() {
+            return NoOpSessionContext.INSTANCE;
         }
 
         @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,14 @@
 
 package com.mongodb.binding;
 
+import com.mongodb.session.SessionContext;
+
 /**
  * A factory of connection sources to servers that can be written to, e.g, a standalone, a mongos, or a replica set primary.
  *
  * @since 3.0
  */
+@Deprecated
 public interface WriteBinding extends ReferenceCounted {
     /**
      * Supply a connection source to a server that can be written to
@@ -28,6 +31,15 @@ public interface WriteBinding extends ReferenceCounted {
      * @return a connection source
      */
     ConnectionSource getWriteConnectionSource();
+
+    /**
+     * Gets the session context for this binding.
+     *
+     * @return the session context, which may not be null
+     *
+     * @since 3.6
+     */
+    SessionContext getSessionContext();
 
     @Override
     WriteBinding retain();

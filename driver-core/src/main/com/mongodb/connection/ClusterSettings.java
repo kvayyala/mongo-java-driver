@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,17 @@
 package com.mongodb.connection;
 
 import com.mongodb.ConnectionString;
+import com.mongodb.MongoClientException;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.ServerAddress;
 import com.mongodb.annotations.Immutable;
 import com.mongodb.annotations.NotThreadSafe;
+import com.mongodb.event.ClusterListener;
+import com.mongodb.selector.CompositeServerSelector;
+import com.mongodb.selector.LatencyMinimizingServerSelector;
 import com.mongodb.selector.ServerSelector;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +35,12 @@ import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.assertions.Assertions.isTrueArgument;
 import static com.mongodb.assertions.Assertions.notNull;
+import static com.mongodb.internal.connection.ServerAddressHelper.createServerAddress;
+import static java.lang.String.format;
+import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
+import static java.util.Collections.unmodifiableList;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Settings for the cluster.
@@ -40,14 +49,17 @@ import static java.util.Collections.singletonList;
  */
 @Immutable
 public final class ClusterSettings {
+    private final String srvHost;
     private final List<ServerAddress> hosts;
     private final ClusterConnectionMode mode;
     private final ClusterType requiredClusterType;
     private final String requiredReplicaSetName;
     private final ServerSelector serverSelector;
     private final String description;
+    private final long localThresholdMS;
     private final long serverSelectionTimeoutMS;
     private final int maxWaitQueueSize;
+    private final List<ClusterListener> clusterListeners;
 
     /**
      * Get a builder for this class.
@@ -59,20 +71,60 @@ public final class ClusterSettings {
     }
 
     /**
+     * Creates a builder instance.
+     *
+     * @param clusterSettings existing ClusterSettings to default the builder settings on.
+     * @return a builder
+     * @since 3.5
+     */
+    public static Builder builder(final ClusterSettings clusterSettings) {
+        return builder().applySettings(clusterSettings);
+    }
+
+    /**
      * A builder for the cluster settings.
      */
     @NotThreadSafe
     public static final class Builder {
-        private List<ServerAddress> hosts;
-        private ClusterConnectionMode mode = ClusterConnectionMode.MULTIPLE;
+        private static final List<ServerAddress> DEFAULT_HOSTS = singletonList(new ServerAddress());
+        private String srvHost;
+        private List<ServerAddress> hosts = DEFAULT_HOSTS;
+        private ClusterConnectionMode mode;
         private ClusterType requiredClusterType = ClusterType.UNKNOWN;
         private String requiredReplicaSetName;
         private ServerSelector serverSelector;
         private String description;
-        private long serverSelectionTimeoutMS = TimeUnit.MILLISECONDS.convert(30, TimeUnit.SECONDS);
+        private long serverSelectionTimeoutMS = MILLISECONDS.convert(30, TimeUnit.SECONDS);
+        private long localThresholdMS = MILLISECONDS.convert(15, MILLISECONDS);
         private int maxWaitQueueSize = 500;
+        private List<ClusterListener> clusterListeners = new ArrayList<ClusterListener>();
 
         private Builder() {
+        }
+
+        /**
+         * Applies the clusterSettings to the builder
+         *
+         * <p>Note: Overwrites all existing settings</p>
+         *
+         * @param clusterSettings the clusterSettings
+         * @return this
+         * @since 3.7
+         */
+        public Builder applySettings(final ClusterSettings clusterSettings) {
+            notNull("clusterSettings", clusterSettings);
+            description = clusterSettings.description;
+            srvHost = clusterSettings.srvHost;
+            hosts = clusterSettings.hosts;
+            mode = clusterSettings.mode;
+            requiredReplicaSetName = clusterSettings.requiredReplicaSetName;
+            requiredClusterType = clusterSettings.requiredClusterType;
+            localThresholdMS = clusterSettings.localThresholdMS;
+            serverSelectionTimeoutMS = clusterSettings.serverSelectionTimeoutMS;
+            maxWaitQueueSize = clusterSettings.maxWaitQueueSize;
+            clusterListeners = new ArrayList<ClusterListener>(clusterSettings.clusterListeners);
+            serverSelector = unpackServerSelector(clusterSettings.serverSelector);
+            return this;
         }
 
         /**
@@ -80,9 +132,25 @@ public final class ClusterSettings {
          *
          * @param description the user defined description of the MongoClient
          * @return this
+         * @deprecated Prefer {@link com.mongodb.MongoClientSettings.Builder#applicationName(String)}
          */
+        @Deprecated
         public Builder description(final String description) {
             this.description = description;
+            return this;
+        }
+
+        /**
+         * Sets the host name to use in order to look up an SRV DNS record to find the MongoDB hosts.
+         *
+         * @param srvHost the SRV host name
+         * @return this
+         */
+        public Builder srvHost(final String srvHost) {
+            if (this.hosts != DEFAULT_HOSTS) {
+                throw new IllegalArgumentException("Can not set both hosts and srvHost");
+            }
+            this.srvHost = srvHost;
             return this;
         }
 
@@ -97,11 +165,15 @@ public final class ClusterSettings {
             if (hosts.isEmpty()) {
                 throw new IllegalArgumentException("hosts list may not be empty");
             }
-            Set<ServerAddress> hostsSet = new LinkedHashSet<ServerAddress>(hosts.size());
-            for (ServerAddress host : hosts) {
-                hostsSet.add(new ServerAddress(host.getHost(), host.getPort()));
+            if (srvHost != null) {
+                throw new IllegalArgumentException("srvHost must be null");
             }
-            this.hosts = Collections.unmodifiableList(new ArrayList<ServerAddress>(hostsSet));
+            Set<ServerAddress> hostsSet = new LinkedHashSet<ServerAddress>(hosts.size());
+            for (ServerAddress serverAddress : hosts) {
+                notNull("serverAddress", serverAddress);
+                hostsSet.add(createServerAddress(serverAddress.getHost(), serverAddress.getPort()));
+            }
+            this.hosts = unmodifiableList(new ArrayList<ServerAddress>(hostsSet));
             return this;
         }
 
@@ -139,10 +211,26 @@ public final class ClusterSettings {
         }
 
         /**
-         * Sets the final server selector for the cluster to apply before selecting a server
+         * Sets the local threshold.
          *
-         * @param serverSelector the server selector to apply as the final selector.
+         * @param localThreshold the acceptable latency difference, in milliseconds, which must be &gt;= 0
+         * @param timeUnit the time unit
+         * @throws IllegalArgumentException if {@code localThreshold < 0}
          * @return this
+         * @since 3.7
+         */
+        public Builder localThreshold(final long localThreshold, final TimeUnit timeUnit) {
+            isTrueArgument("localThreshold must be >= 0", localThreshold >= 0);
+            this.localThresholdMS = MILLISECONDS.convert(localThreshold, timeUnit);
+            return this;
+        }
+
+        /**
+         * Adds a server selector for the cluster to apply before selecting a server.
+         *
+         * @param serverSelector the server selector to apply as selector.
+         * @return this
+         * @see #getServerSelector()
          */
         public Builder serverSelector(final ServerSelector serverSelector) {
             this.serverSelector = serverSelector;
@@ -161,7 +249,7 @@ public final class ClusterSettings {
          * @return this
          */
         public Builder serverSelectionTimeout(final long serverSelectionTimeout, final TimeUnit timeUnit) {
-            this.serverSelectionTimeoutMS = TimeUnit.MILLISECONDS.convert(serverSelectionTimeout, timeUnit);
+            this.serverSelectionTimeoutMS = MILLISECONDS.convert(serverSelectionTimeout, timeUnit);
             return this;
         }
 
@@ -180,29 +268,74 @@ public final class ClusterSettings {
         }
 
         /**
-         * Take the settings from the given ConnectionString and add them to the builder
+         * Adds a cluster listener.
          *
-         * @param connectionString a URI containing details of how to connect to MongoDB
+         * @param clusterListener the non-null cluster listener
+         * @return this
+         * @since 3.3
+         */
+        public Builder addClusterListener(final ClusterListener clusterListener) {
+            notNull("clusterListener", clusterListener);
+            clusterListeners.add(clusterListener);
+            return this;
+        }
+
+        /**
+         * Takes the settings from the given {@code ConnectionString} and applies them to the builder
+         *
+         * @param connectionString the connection string containing details of how to connect to MongoDB
          * @return this
          */
         public Builder applyConnectionString(final ConnectionString connectionString) {
-            if (connectionString.getHosts().size() == 1 && connectionString.getRequiredReplicaSetName() == null) {
+            if (connectionString.isSrvProtocol()) {
+                mode(ClusterConnectionMode.MULTIPLE);
+                srvHost(connectionString.getHosts().get(0));
+            }
+            else if (connectionString.getHosts().size() == 1 && connectionString.getRequiredReplicaSetName() == null) {
                 mode(ClusterConnectionMode.SINGLE)
-                .hosts(singletonList(new ServerAddress(connectionString.getHosts().get(0))));
+                .hosts(singletonList(createServerAddress(connectionString.getHosts().get(0))));
             } else {
                 List<ServerAddress> seedList = new ArrayList<ServerAddress>();
                 for (final String cur : connectionString.getHosts()) {
-                    seedList.add(new ServerAddress(cur));
+                    seedList.add(createServerAddress(cur));
                 }
                 mode(ClusterConnectionMode.MULTIPLE).hosts(seedList);
             }
             requiredReplicaSetName(connectionString.getRequiredReplicaSetName());
 
-            int maxSize = connectionString.getMaxConnectionPoolSize() != null ? connectionString.getMaxConnectionPoolSize() : 100;
-            int waitQueueMultiple = connectionString.getThreadsAllowedToBlockForConnectionMultiplier() != null
-                                    ? connectionString.getThreadsAllowedToBlockForConnectionMultiplier() : 5;
+            Integer maxConnectionPoolSize = connectionString.getMaxConnectionPoolSize();
+            int maxSize = maxConnectionPoolSize != null ? maxConnectionPoolSize : 100;
+
+            Integer threadsAllowedToBlockForConnectionMultiplier = connectionString.getThreadsAllowedToBlockForConnectionMultiplier();
+            int waitQueueMultiple = threadsAllowedToBlockForConnectionMultiplier != null
+                                    ? threadsAllowedToBlockForConnectionMultiplier : 5;
             maxWaitQueueSize(waitQueueMultiple * maxSize);
+
+            Integer serverSelectionTimeout = connectionString.getServerSelectionTimeout();
+            if (serverSelectionTimeout != null) {
+                serverSelectionTimeout(serverSelectionTimeout, MILLISECONDS);
+            }
+
+            Integer localThreshold = connectionString.getLocalThreshold();
+            if (localThreshold != null) {
+                localThreshold(localThreshold, MILLISECONDS);
+            }
             return this;
+        }
+
+        private ServerSelector unpackServerSelector(final ServerSelector serverSelector) {
+            if (serverSelector instanceof CompositeServerSelector) {
+                return ((CompositeServerSelector) serverSelector).getServerSelectors().get(0);
+            }
+            return null;
+        }
+
+        private ServerSelector packServerSelector() {
+            ServerSelector latencyMinimizingServerSelector = new LatencyMinimizingServerSelector(localThresholdMS, MILLISECONDS);
+            if (serverSelector == null) {
+                return latencyMinimizingServerSelector;
+            }
+            return new CompositeServerSelector(asList(serverSelector, latencyMinimizingServerSelector));
         }
 
         /**
@@ -219,9 +352,20 @@ public final class ClusterSettings {
      * Gets the user defined description of the MongoClient.
      *
      * @return the user defined description of the MongoClient
+     * @deprecated Prefer {@link MongoClientSettings#getApplicationName()}
      */
+    @Deprecated
     public String getDescription() {
         return description;
+    }
+
+    /**
+     * Gets the host name from which to lookup SRV record for the seed list
+     * @return the SRV host, or null if none specified
+     * @since 3.10
+     */
+    public String getSrvHost() {
+        return srvHost;
     }
 
     /**
@@ -243,9 +387,9 @@ public final class ClusterSettings {
     }
 
     /**
-     * Get
+     * Gets the required cluster type
      *
-     * @return the cluster type
+     * @return the required cluster type
      */
     public ClusterType getRequiredClusterType() {
         return requiredClusterType;
@@ -261,8 +405,26 @@ public final class ClusterSettings {
     }
 
     /**
-     * Gets the {@code ServerSelector} that will be uses as the final server selector that is applied in calls to {@code
-     * Cluster.selectServer}.
+     * Gets the server selector.
+     *
+     * <p>The server selector augments the normal server selection rules applied by the driver when determining
+     * which server to send an operation to.  At the point that it's called by the driver, the
+     * {@link com.mongodb.connection.ClusterDescription} which is passed to it contains a list of
+     * {@link com.mongodb.connection.ServerDescription} instances which satisfy either the configured {@link com.mongodb.ReadPreference}
+     * for any read operation or ones that can take writes (e.g. a standalone, mongos, or replica set primary).
+     * </p>
+     * <p>The server selector can then filter the {@code ServerDescription} list using whatever criteria that is required by the
+     * application.</p>
+     * <p>After this selector executes, two additional selectors are applied by the driver:</p>
+     * <ul>
+     * <li>select from within the latency window</li>
+     * <li>select a random server from those remaining</li>
+     * </ul>
+     * <p>To skip the latency window selector, an application can:</p>
+     * <ul>
+     * <li>configure the local threshold to a sufficiently high value so that it doesn't exclude any servers</li>
+     * <li>return a list containing a single server from this selector (which will also make the random member selector a no-op)</li>
+     * </ul>
      *
      * @return the server selector, which may be null
      * @see Cluster#selectServer(com.mongodb.selector.ServerSelector)
@@ -282,7 +444,29 @@ public final class ClusterSettings {
      * @return the timeout in the given time unit
      */
     public long getServerSelectionTimeout(final TimeUnit timeUnit) {
-        return timeUnit.convert(serverSelectionTimeoutMS, TimeUnit.MILLISECONDS);
+        return timeUnit.convert(serverSelectionTimeoutMS, MILLISECONDS);
+    }
+
+    /**
+     * Gets the local threshold.  When choosing among multiple MongoDB servers to send a request, the MongoClient will only
+     * send that request to a server whose ping time is less than or equal to the server with the fastest ping time plus the local
+     * threshold.
+     *
+     * <p>For example, let's say that the client is choosing a server to send a query when the read preference is {@code
+     * ReadPreference.secondary()}, and that there are three secondaries, server1, server2, and server3, whose ping times are 10, 15, and 16
+     * milliseconds, respectively.  With a local threshold of 5 milliseconds, the client will send the query to either
+     * server1 or server2 (randomly selecting between the two).
+     * </p>
+     *
+     * <p>Default is 15 milliseconds.</p>
+     *
+     * @param timeUnit the time unit
+     * @return the local threshold in the given timeunit.
+     * @since 3.7
+     * @mongodb.driver.manual reference/program/mongos/#cmdoption--localThreshold Local Threshold
+     */
+    public long getLocalThreshold(final TimeUnit timeUnit) {
+        return timeUnit.convert(localThresholdMS, MILLISECONDS);
     }
 
     /**
@@ -295,6 +479,16 @@ public final class ClusterSettings {
      */
     public int getMaxWaitQueueSize() {
         return maxWaitQueueSize;
+    }
+
+    /**
+     * Gets the cluster listeners.  The default value is an empty list.
+     *
+     * @return the cluster listeners
+     * @since 3.3
+     */
+    public List<ClusterListener> getClusterListeners() {
+        return clusterListeners;
     }
 
     @Override
@@ -314,7 +508,13 @@ public final class ClusterSettings {
         if (serverSelectionTimeoutMS != that.serverSelectionTimeoutMS) {
             return false;
         }
+        if (localThresholdMS != that.localThresholdMS) {
+            return false;
+        }
         if (description != null ? !description.equals(that.description) : that.description != null) {
+            return false;
+        }
+        if (srvHost != null ? !srvHost.equals(that.srvHost) : that.srvHost != null) {
             return false;
         }
         if (!hosts.equals(that.hosts)) {
@@ -327,10 +527,13 @@ public final class ClusterSettings {
             return false;
         }
         if (requiredReplicaSetName != null ? !requiredReplicaSetName.equals(that.requiredReplicaSetName)
-                                           : that.requiredReplicaSetName != null) {
+                    : that.requiredReplicaSetName != null) {
             return false;
         }
         if (serverSelector != null ? !serverSelector.equals(that.serverSelector) : that.serverSelector != null) {
+            return false;
+        }
+        if (!clusterListeners.equals(that.clusterListeners)) {
             return false;
         }
 
@@ -340,25 +543,31 @@ public final class ClusterSettings {
     @Override
     public int hashCode() {
         int result = hosts.hashCode();
+        result = 31 * result + (srvHost != null ? srvHost.hashCode() : 0);
         result = 31 * result + mode.hashCode();
         result = 31 * result + requiredClusterType.hashCode();
         result = 31 * result + (requiredReplicaSetName != null ? requiredReplicaSetName.hashCode() : 0);
         result = 31 * result + (serverSelector != null ? serverSelector.hashCode() : 0);
         result = 31 * result + (description != null ? description.hashCode() : 0);
         result = 31 * result + (int) (serverSelectionTimeoutMS ^ (serverSelectionTimeoutMS >>> 32));
+        result = 31 * result + (int) (localThresholdMS ^ (localThresholdMS >>> 32));
         result = 31 * result + maxWaitQueueSize;
+        result = 31 * result + clusterListeners.hashCode();
         return result;
     }
 
     @Override
     public String toString() {
         return "{"
-               + "hosts=" + hosts
+               + (hosts.isEmpty() ? "" : "hosts=" + hosts)
+               + (srvHost == null ? "" : ", srvHost=" + srvHost)
                + ", mode=" + mode
                + ", requiredClusterType=" + requiredClusterType
                + ", requiredReplicaSetName='" + requiredReplicaSetName + '\''
                + ", serverSelector='" + serverSelector + '\''
+               + ", clusterListeners='" + clusterListeners + '\''
                + ", serverSelectionTimeout='" + serverSelectionTimeoutMS + " ms" + '\''
+               + ", localThreshold='" + serverSelectionTimeoutMS + " ms" + '\''
                + ", maxWaitQueueSize=" + maxWaitQueueSize
                + ", description='" + description + '\''
                + '}';
@@ -371,7 +580,8 @@ public final class ClusterSettings {
      */
     public String getShortDescription() {
         return "{"
-               + "hosts=" + hosts
+                + (hosts.isEmpty() ? "" : "hosts=" + hosts)
+                + (srvHost == null ? "" : ", srvHost=" + srvHost)
                + ", mode=" + mode
                + ", requiredClusterType=" + requiredClusterType
                + ", serverSelectionTimeout='" + serverSelectionTimeoutMS + " ms" + '\''
@@ -382,14 +592,23 @@ public final class ClusterSettings {
     }
 
     private ClusterSettings(final Builder builder) {
-        notNull("hosts", builder.hosts);
-        isTrueArgument("hosts size > 0", builder.hosts.size() > 0);
+        // TODO: Unit test this
+        if (builder.srvHost != null) {
+            if (builder.srvHost.contains(":")) {
+                throw new IllegalArgumentException("The srvHost can not contain a host name that specifies a port");
+            }
+
+            if (builder.hosts.get(0).getHost().split("\\.").length < 3) {
+                throw new MongoClientException(format("An SRV host name '%s' was provided that does not contain at least three parts. "
+                        + "It must contain a hostname, domain name and a top level domain.", builder.hosts.get(0).getHost()));
+            }
+        }
 
         if (builder.hosts.size() > 1 && builder.requiredClusterType == ClusterType.STANDALONE) {
             throw new IllegalArgumentException("Multiple hosts cannot be specified when using ClusterType.STANDALONE.");
         }
 
-        if (builder.mode == ClusterConnectionMode.SINGLE && builder.hosts.size() > 1) {
+        if (builder.mode != null && builder.mode == ClusterConnectionMode.SINGLE && builder.hosts.size() > 1) {
             throw new IllegalArgumentException("Can not directly connect to more than one server");
         }
 
@@ -403,12 +622,15 @@ public final class ClusterSettings {
         }
 
         description = builder.description;
+        srvHost = builder.srvHost;
         hosts = builder.hosts;
-        mode = builder.mode;
+        mode = builder.mode != null ? builder.mode : hosts.size() == 1 ? ClusterConnectionMode.SINGLE : ClusterConnectionMode.MULTIPLE;
         requiredReplicaSetName = builder.requiredReplicaSetName;
         requiredClusterType = builder.requiredClusterType;
-        serverSelector = builder.serverSelector;
+        localThresholdMS = builder.localThresholdMS;
+        serverSelector = builder.packServerSelector();
         serverSelectionTimeoutMS = builder.serverSelectionTimeoutMS;
         maxWaitQueueSize = builder.maxWaitQueueSize;
+        clusterListeners = unmodifiableList(builder.clusterListeners);
     }
 }

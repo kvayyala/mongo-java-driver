@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import org.bson.BsonArray
 import org.bson.BsonBoolean
 import org.bson.BsonDateTime
 import org.bson.BsonDbPointer
+import org.bson.BsonDecimal128
 import org.bson.BsonDocument
 import org.bson.BsonDocumentWrapper
 import org.bson.BsonDouble
@@ -36,6 +37,7 @@ import org.bson.BsonString
 import org.bson.BsonSymbol
 import org.bson.BsonTimestamp
 import org.bson.BsonUndefined
+import org.bson.RawBsonArray
 import org.bson.RawBsonDocument
 import spock.lang.Specification
 
@@ -55,6 +57,7 @@ class BsonValueCodecProviderSpecification extends Specification {
         provider.get(BsonDouble, codecRegistry).class == BsonDoubleCodec
         provider.get(BsonString, codecRegistry).class == BsonStringCodec
         provider.get(BsonBoolean, codecRegistry).class == BsonBooleanCodec
+        provider.get(BsonDecimal128, codecRegistry).class == BsonDecimal128Codec
 
         provider.get(BsonNull, codecRegistry).class == BsonNullCodec
         provider.get(BsonDateTime, codecRegistry).class == BsonDateTimeCodec
@@ -71,9 +74,11 @@ class BsonValueCodecProviderSpecification extends Specification {
         provider.get(BsonJavaScriptWithScope, codecRegistry).class == BsonJavaScriptWithScopeCodec
 
         provider.get(BsonArray, codecRegistry).class == BsonArrayCodec
+        provider.get(RawBsonArray, codecRegistry).class == BsonArrayCodec
 
         provider.get(BsonDocument, codecRegistry).class == BsonDocumentCodec
         provider.get(BsonDocumentWrapper, codecRegistry).class == BsonDocumentWrapperCodec
         provider.get(RawBsonDocument, codecRegistry).class == RawBsonDocumentCodec
+        provider.get(BsonDocumentSubclass, codecRegistry).class == BsonDocumentCodec
     }
 }

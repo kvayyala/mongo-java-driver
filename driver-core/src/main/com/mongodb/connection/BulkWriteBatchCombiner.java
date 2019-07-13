@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import static java.util.Arrays.asList;
 /**
  * This class is not part of the public API.  It may be changed or removed at any time.
  */
+@Deprecated
 public class BulkWriteBatchCombiner {
     private final ServerAddress serverAddress;
     private final boolean ordered;
@@ -45,7 +46,7 @@ public class BulkWriteBatchCombiner {
     private int insertedCount;
     private int matchedCount;
     private int deletedCount;
-    private Integer modifiedCount = 0;
+    private int modifiedCount = 0;
     private final Set<BulkWriteUpsert> writeUpserts = new TreeSet<BulkWriteUpsert>(new Comparator<BulkWriteUpsert>() {
         @Override
         public int compare(final BulkWriteUpsert o1, final BulkWriteUpsert o2) {
@@ -83,11 +84,7 @@ public class BulkWriteBatchCombiner {
         insertedCount += result.getInsertedCount();
         matchedCount += result.getMatchedCount();
         deletedCount += result.getDeletedCount();
-        if (result.isModifiedCountAvailable() && modifiedCount != null) {
-            modifiedCount += result.getModifiedCount();
-        } else {
-            modifiedCount = null;
-        }
+        modifiedCount += result.getModifiedCount();
         mergeUpserts(result.getUpserts(), indexMap);
     }
 

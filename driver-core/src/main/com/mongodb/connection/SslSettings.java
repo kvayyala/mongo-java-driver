@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,10 @@ import com.mongodb.MongoInternalException;
 import com.mongodb.annotations.Immutable;
 import com.mongodb.annotations.NotThreadSafe;
 
+import javax.net.ssl.SSLContext;
+
+import static com.mongodb.assertions.Assertions.notNull;
+
 /**
  * Settings for connecting to MongoDB via SSL.
  *
@@ -30,6 +34,7 @@ import com.mongodb.annotations.NotThreadSafe;
 public class SslSettings {
     private final boolean enabled;
     private final boolean invalidHostNameAllowed;
+    private final SSLContext context;
 
     /**
      * Gets a Builder for creating a new SSLSettings instance.
@@ -41,12 +46,44 @@ public class SslSettings {
     }
 
     /**
+     * Creates a builder instance.
+     *
+     * @param sslSettings existing SslSettings to default the builder settings on.
+     * @return a builder
+     * @since 3.7
+     */
+    public static Builder builder(final SslSettings sslSettings) {
+        return builder().applySettings(sslSettings);
+    }
+
+    /**
      * A builder for creating SSLSettings.
      */
     @NotThreadSafe
-    public static class Builder {
+    public static final class Builder {
         private boolean enabled;
         private boolean invalidHostNameAllowed;
+        private SSLContext context;
+
+        private Builder(){
+        }
+
+        /**
+         * Applies the sslSettings to the builder
+         *
+         * <p>Note: Overwrites all existing settings</p>
+         *
+         * @param sslSettings the sslSettings
+         * @return this
+         * @since 3.7
+         */
+        public Builder applySettings(final SslSettings sslSettings) {
+            notNull("sslSettings", sslSettings);
+            enabled = sslSettings.enabled;
+            invalidHostNameAllowed = sslSettings.invalidHostNameAllowed;
+            context = sslSettings.context;
+            return this;
+        }
 
         /**
          * Define whether SSL should be enabled.
@@ -72,15 +109,34 @@ public class SslSettings {
         }
 
         /**
-         * Take the settings from the given ConnectionString and set them in this builder.
+         * Sets the SSLContext for use when SSL is enabled.
          *
-         * @param connectionString a URI with details on how to connect to MongoDB.
+         * @param context the SSLContext to use for connections.  Ignored if SSL is not enabled.
+         * @return this
+         * @since 3.5
+         */
+        public Builder context(final SSLContext context) {
+            this.context = context;
+            return this;
+        }
+
+        /**
+         * Takes the settings from the given {@code ConnectionString} and applies them to the builder
+         *
+         * @param connectionString the connection string containing details of how to connect to MongoDB
          * @return this
          */
         public Builder applyConnectionString(final ConnectionString connectionString) {
-            if (connectionString.getSslEnabled() != null) {
-                this.enabled = connectionString.getSslEnabled();
+            Boolean sslEnabled = connectionString.getSslEnabled();
+            if (sslEnabled != null) {
+                this.enabled = sslEnabled;
             }
+
+            Boolean sslInvalidHostnameAllowed = connectionString.getSslInvalidHostnameAllowed();
+            if (sslInvalidHostnameAllowed != null) {
+                this.invalidHostNameAllowed = sslInvalidHostnameAllowed;
+            }
+
             return this;
         }
 
@@ -115,16 +171,27 @@ public class SslSettings {
         return invalidHostNameAllowed;
     }
 
+    /**
+     * Gets the SSLContext configured for use with SSL connections.
+     *
+     * @return the SSLContext, which defaults to null if not configured.  In that case {@code SSLContext.getDefault()} will be used if SSL
+     * is enabled.
+     * @since 3.5
+     * @see SSLContext#getDefault()
+     */
+    public SSLContext getContext() {
+        return context;
+    }
+
     SslSettings(final Builder builder) {
         enabled = builder.enabled;
         invalidHostNameAllowed = builder.invalidHostNameAllowed;
-        if (enabled && !invalidHostNameAllowed) {
-            if (System.getProperty("java.version").startsWith("1.6.")) {
-                throw new MongoInternalException("By default, SSL connections are only supported on Java 7 or later.  If the application "
-                                                 + "must run on Java 6, you must set the SslSettings.invalidHostNameAllowed property to "
-                                                 + "false");
-            }
+        if (enabled && !invalidHostNameAllowed && System.getProperty("java.version").startsWith("1.6.")) {
+            throw new MongoInternalException("By default, SSL connections are only supported on Java 7 or later.  If the application "
+                                             + "must run on Java 6, you must set the SslSettings.invalidHostNameAllowed property to "
+                                             + "true");
         }
+        context = builder.context;
     }
 
     @Override
@@ -144,14 +211,14 @@ public class SslSettings {
         if (invalidHostNameAllowed != that.invalidHostNameAllowed) {
             return false;
         }
-
-        return true;
+        return context != null ? context.equals(that.context) : that.context == null;
     }
 
     @Override
     public int hashCode() {
         int result = (enabled ? 1 : 0);
         result = 31 * result + (invalidHostNameAllowed ? 1 : 0);
+        result = 31 * result + (context != null ? context.hashCode() : 0);
         return result;
     }
 
@@ -160,6 +227,7 @@ public class SslSettings {
         return "SslSettings{"
                + "enabled=" + enabled
                + ", invalidHostNameAllowed=" + invalidHostNameAllowed
+               + ", context=" + context
                + '}';
     }
 }

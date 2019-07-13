@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,51 +14,59 @@
  * limitations under the License.
  */
 
-def configDir = new File(rootDir, 'config')
-
-apply plugin: 'idea'
-apply plugin: 'osgi'
-
 archivesBaseName = 'mongo-java-driver'
 
-task init() << {
-    new File("${project.rootDir}/${archivesBaseName}/build/classes/main").mkdirs()
+description =  'The MongoDB Java Driver uber-artifact, containing the legacy driver, the mongodb-driver, mongodb-driver-core, and bson'
+ext {
+    pomName = 'MongoDB Java Driver'
 }
 
-def getJar(name) {
-    project(name).jar.archivePath
+
+// dependencies copied from driver-core
+dependencies {
+    compile "com.github.jnr:jnr-unixsocket:$jnrUnixsocketVersion", optional
+    compile "io.netty:netty-buffer:$nettyVersion", optional
+    compile "io.netty:netty-transport:$nettyVersion", optional
+    compile "io.netty:netty-handler:$nettyVersion", optional
+    compile "org.xerial.snappy:snappy-java:$snappyVersion", optional
+    compile "com.github.luben:zstd-jni:$zstdVersion", optional
+    compile "org.mongodb:mongodb-crypt:$mongoCryptVersion", optional
 }
 
+// srcDirs copied as well, so everything is compiled twice
+sourceSets {
+    main {
+        java {
+            srcDirs = ["$rootDir/driver-legacy/src/main",
+                       "$rootDir/driver-sync/src/main",
+                       "$rootDir/driver-core/src/main",
+                       "$rootDir/driver-core/build/gen/buildconfig/src/main",
+                       "$rootDir/bson/src/main"]
+        }
+    }
+}
+
+// copied from driver-core
 jar {
     manifest {
+        instruction 'Build-Version', project.gitVersion
         instruction 'Import-Package',
                     'javax.xml.bind.*',
                     'javax.crypto.*',
                     'javax.crypto.spec.*',
                     'javax.management.*',
+                    'javax.naming.*',
+                    'javax.naming.directory.*',
+                    'javax.naming.spi.*',
                     'javax.net.*',
                     'javax.net.ssl.*',
                     'javax.security.sasl.*',
                     'javax.security.auth.callback.*',
                     'org.ietf.jgss.*',
                     'io.netty.*;resolution:=optional',
-                    'org.slf4j;resolution:=optional'
-    }
-    from(zipTree(getJar(":driver-core"))) {
-        exclude("META-INF")
-    }
-    from(zipTree(getJar(":driver"))) {
-        exclude("META-INF")
-    }
-    from(zipTree(getJar(":bson"))) {
-        exclude("META-INF")
-    }
-}.dependsOn("init")
-
-modifyPom {
-    project {
-        name 'MongoDB Java Driver'
-        description 'The MongoDB Java Driver uber-artifact, containing mongodb-driver, mongodb-driver-core, and bson'
-        url 'http://www.mongodb.org'
+                    'org.xerial.snappy.*;resolution:=optional',
+                    'com.github.luben.zstd.*;resolution:=optional',
+                    'org.slf4j;resolution:=optional',
+                    'jnr.unixsocket;resolution:=optional'
     }
 }

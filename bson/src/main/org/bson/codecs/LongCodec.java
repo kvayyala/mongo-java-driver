@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.bson.codecs;
 import org.bson.BsonReader;
 import org.bson.BsonWriter;
 
+import static org.bson.codecs.NumberCodecHelper.decodeLong;
+
 /**
  * Encodes and decodes {@code Long} objects.
  *
@@ -26,6 +28,7 @@ import org.bson.BsonWriter;
  */
 
 public class LongCodec implements Codec<Long> {
+
     @Override
     public void encode(final BsonWriter writer, final Long value, final EncoderContext encoderContext) {
         writer.writeInt64(value);
@@ -33,7 +36,7 @@ public class LongCodec implements Codec<Long> {
 
     @Override
     public Long decode(final BsonReader reader, final DecoderContext decoderContext) {
-        return reader.readInt64();
+        return decodeLong(reader);
     }
 
     @Override

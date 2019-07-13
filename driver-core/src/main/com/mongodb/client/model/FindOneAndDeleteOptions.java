@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.client.model;
 
+import com.mongodb.lang.Nullable;
 import org.bson.conversions.Bson;
 
 import java.util.concurrent.TimeUnit;
@@ -33,6 +34,7 @@ public class FindOneAndDeleteOptions {
     private Bson projection;
     private Bson sort;
     private long maxTimeMS;
+    private Collation collation;
 
     /**
      * Gets a document describing the fields to return for all matching documents.
@@ -40,6 +42,7 @@ public class FindOneAndDeleteOptions {
      * @return the project document, which may be null
      * @mongodb.driver.manual tutorial/project-fields-from-query-results Projection
      */
+    @Nullable
     public Bson getProjection() {
         return projection;
     }
@@ -51,7 +54,7 @@ public class FindOneAndDeleteOptions {
      * @return this
      * @mongodb.driver.manual tutorial/project-fields-from-query-results Projection
      */
-    public FindOneAndDeleteOptions projection(final Bson projection) {
+    public FindOneAndDeleteOptions projection(@Nullable final Bson projection) {
         this.projection = projection;
         return this;
     }
@@ -63,6 +66,7 @@ public class FindOneAndDeleteOptions {
      * @return a document describing the sort criteria
      * @mongodb.driver.manual reference/method/cursor.sort/ Sort
      */
+    @Nullable
     public Bson getSort() {
         return sort;
     }
@@ -74,7 +78,7 @@ public class FindOneAndDeleteOptions {
      * @return this
      * @mongodb.driver.manual reference/method/cursor.sort/ Sort
      */
-    public FindOneAndDeleteOptions sort(final Bson sort) {
+    public FindOneAndDeleteOptions sort(@Nullable final Bson sort) {
         this.sort = sort;
         return this;
     }
@@ -102,4 +106,39 @@ public class FindOneAndDeleteOptions {
         return timeUnit.convert(maxTimeMS, MILLISECONDS);
     }
 
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    @Nullable
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public FindOneAndDeleteOptions collation(@Nullable final Collation collation) {
+        this.collation = collation;
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return "FindOneAndDeleteOptions{"
+                + "projection=" + projection
+                + ", sort=" + sort
+                + ", maxTimeMS=" + maxTimeMS
+                + ", collation=" + collation
+                + '}';
+    }
 }

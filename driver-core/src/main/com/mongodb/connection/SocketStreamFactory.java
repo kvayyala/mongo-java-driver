@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,16 @@
 
 package com.mongodb.connection;
 
+import com.mongodb.MongoClientException;
 import com.mongodb.ServerAddress;
+import com.mongodb.UnixServerAddress;
 import com.mongodb.internal.connection.PowerOfTwoBufferPool;
+import com.mongodb.internal.connection.SocketStream;
+import com.mongodb.internal.connection.UnixSocketChannelStream;
 
 import javax.net.SocketFactory;
-import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.SSLContext;
+import java.security.NoSuchAlgorithmException;
 
 import static com.mongodb.assertions.Assertions.notNull;
 
@@ -61,17 +66,28 @@ public class SocketStreamFactory implements StreamFactory {
     @Override
     public Stream create(final ServerAddress serverAddress) {
         Stream stream;
-        if (socketFactory != null) {
-            stream = new SocketStream(serverAddress, settings, sslSettings, socketFactory, bufferProvider);
-        } else if (sslSettings.isEnabled()) {
-            stream = new SocketStream(serverAddress, settings, sslSettings, SSLSocketFactory.getDefault(), bufferProvider);
-        } else if (System.getProperty("org.mongodb.useSocket", "false").equals("true")) {
-            stream = new SocketStream(serverAddress, settings, sslSettings, SocketFactory.getDefault(), bufferProvider);
+        if (serverAddress instanceof UnixServerAddress) {
+            if (sslSettings.isEnabled()) {
+                throw new MongoClientException("Socket based connections do not support ssl");
+            }
+            stream = new UnixSocketChannelStream((UnixServerAddress) serverAddress, settings, sslSettings, bufferProvider);
         } else {
-            stream = new SocketChannelStream(serverAddress, settings, sslSettings, bufferProvider);
+            if (socketFactory != null) {
+                stream = new SocketStream(serverAddress, settings, sslSettings, socketFactory, bufferProvider);
+            } else if (sslSettings.isEnabled()) {
+                stream = new SocketStream(serverAddress, settings, sslSettings, getSslContext().getSocketFactory(), bufferProvider);
+            } else {
+                stream = new SocketStream(serverAddress, settings, sslSettings, SocketFactory.getDefault(), bufferProvider);
+            }
         }
-
         return stream;
     }
 
+    private SSLContext getSslContext() {
+        try {
+            return (sslSettings.getContext() == null) ? SSLContext.getDefault() : sslSettings.getContext();
+        } catch (NoSuchAlgorithmException e) {
+            throw new MongoClientException("Unable to create default SSLContext", e);
+        }
+    }
 }

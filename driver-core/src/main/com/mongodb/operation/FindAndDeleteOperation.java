@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,64 +17,80 @@
 package com.mongodb.operation;
 
 import com.mongodb.MongoNamespace;
-import com.mongodb.async.SingleResultCallback;
-import com.mongodb.binding.AsyncWriteBinding;
-import com.mongodb.binding.WriteBinding;
+import com.mongodb.WriteConcern;
+import com.mongodb.client.model.Collation;
+import com.mongodb.connection.ConnectionDescription;
+import com.mongodb.connection.ServerDescription;
+import com.mongodb.internal.validator.NoOpFieldNameValidator;
+import com.mongodb.session.SessionContext;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
+import org.bson.FieldNameValidator;
 import org.bson.codecs.Decoder;
 
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
+import static com.mongodb.operation.CommandOperationHelper.CommandCreator;
 import static com.mongodb.operation.DocumentHelper.putIfNotNull;
 import static com.mongodb.operation.DocumentHelper.putIfNotZero;
+import static com.mongodb.operation.OperationHelper.validateCollation;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * An operation that atomically finds and deletes a single document.
  *
  * @param <T> the operations result type.
+ * @mongodb.driver.manual reference/command/findAndModify/ findAndModify
  * @since 3.0
  */
-public class FindAndDeleteOperation<T> implements AsyncWriteOperation<T>, WriteOperation<T> {
-    private final MongoNamespace namespace;
-    private final Decoder<T> decoder;
+@Deprecated
+public class FindAndDeleteOperation<T> extends BaseFindAndModifyOperation<T> {
     private BsonDocument filter;
     private BsonDocument projection;
     private BsonDocument sort;
     private long maxTimeMS;
+    private Collation collation;
 
     /**
      * Construct a new instance.
      *
      * @param namespace the database and collection namespace for the operation.
-     * @param decoder the decoder for the result documents.
+     * @param decoder   the decoder for the result documents.
+     * @deprecated      use {@link #FindAndDeleteOperation(MongoNamespace, WriteConcern, boolean, Decoder)} instead
      */
+    @Deprecated
     public FindAndDeleteOperation(final MongoNamespace namespace, final Decoder<T> decoder) {
-        this.namespace = notNull("namespace", namespace);
-        this.decoder = notNull("decoder", decoder);
+        this(namespace, WriteConcern.ACKNOWLEDGED, false, decoder);
     }
 
     /**
-     * Gets the namespace.
+     * Construct a new instance.
      *
-     * @return the namespace
+     * @param namespace    the database and collection namespace for the operation.
+     * @param writeConcern the writeConcern for the operation
+     * @param decoder      the decoder for the result documents.
+     * @since 3.2
+     * @deprecated         use {@link #FindAndDeleteOperation(MongoNamespace, WriteConcern, boolean, Decoder)} instead
      */
-    public MongoNamespace getNamespace() {
-        return namespace;
+    @Deprecated
+    public FindAndDeleteOperation(final MongoNamespace namespace, final WriteConcern writeConcern, final Decoder<T> decoder) {
+        this(namespace, writeConcern, false, decoder);
     }
 
     /**
-     * Gets the decoder used to decode the result documents.
+     * Construct a new instance.
      *
-     * @return the decoder
+     * @param namespace    the database and collection namespace for the operation.
+     * @param writeConcern the writeConcern for the operation
+     * @param retryWrites  if writes should be retried if they fail due to a network error.
+     * @param decoder      the decoder for the result documents.
+     * @since 3.6
      */
-    public Decoder<T> getDecoder() {
-        return decoder;
+    public FindAndDeleteOperation(final MongoNamespace namespace, final WriteConcern writeConcern, final boolean retryWrites,
+                                  final Decoder<T> decoder) {
+        super(namespace, writeConcern, retryWrites, decoder);
     }
 
     /**
@@ -169,28 +185,66 @@ public class FindAndDeleteOperation<T> implements AsyncWriteOperation<T>, WriteO
         return this;
     }
 
-    @Override
-    public T execute(final WriteBinding binding) {
-        return executeWrappedCommandProtocol(namespace.getDatabaseName(), getFindAndRemoveDocument(),
-                                             CommandResultDocumentCodec.create(decoder, "value"),
-                                             binding, FindAndModifyHelper.<T>transformer());
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @mongodb.server.release 3.4
+     * @since 3.4
+     */
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @mongodb.server.release 3.4
+     * @since 3.4
+     */
+    public FindAndDeleteOperation<T> collation(final Collation collation) {
+        this.collation = collation;
+        return this;
     }
 
     @Override
-    public void executeAsync(final AsyncWriteBinding binding, final SingleResultCallback<T> callback) {
-        executeWrappedCommandProtocolAsync(namespace.getDatabaseName(), getFindAndRemoveDocument(),
-                                           CommandResultDocumentCodec.create(decoder, "value"),
-                                           binding, FindAndModifyHelper.<T>transformer(), callback);
+    protected String getDatabaseName() {
+        return getNamespace().getDatabaseName();
     }
 
-    private BsonDocument getFindAndRemoveDocument() {
-        BsonDocument command = new BsonDocument("findandmodify", new BsonString(namespace.getCollectionName()));
-        putIfNotNull(command, "query", getFilter());
-        putIfNotNull(command, "fields", getProjection());
-        putIfNotNull(command, "sort", getSort());
-        putIfNotZero(command, "maxTimeMS", getMaxTime(MILLISECONDS));
-        command.put("remove", BsonBoolean.TRUE);
-        return command;
+    @Override
+    protected CommandCreator getCommandCreator(final SessionContext sessionContext) {
+        return new CommandCreator() {
+            @Override
+            public BsonDocument create(final ServerDescription serverDescription, final ConnectionDescription connectionDescription) {
+                return createCommand(sessionContext, serverDescription, connectionDescription);
+            }
+        };
+    }
+
+    private BsonDocument createCommand(final SessionContext sessionContext, final ServerDescription serverDescription,
+                                       final ConnectionDescription connectionDescription) {
+        validateCollation(connectionDescription, collation);
+        BsonDocument commandDocument = new BsonDocument("findAndModify", new BsonString(getNamespace().getCollectionName()));
+        putIfNotNull(commandDocument, "query", getFilter());
+        putIfNotNull(commandDocument, "fields", getProjection());
+        putIfNotNull(commandDocument, "sort", getSort());
+        putIfNotZero(commandDocument, "maxTimeMS", getMaxTime(MILLISECONDS));
+        commandDocument.put("remove", BsonBoolean.TRUE);
+        addWriteConcernToCommand(connectionDescription, commandDocument, sessionContext);
+        if (collation != null) {
+            commandDocument.put("collation", collation.asDocument());
+        }
+        addTxnNumberToCommand(serverDescription, connectionDescription, commandDocument, sessionContext);
+        return commandDocument;
+    }
+
+    @Override
+    protected FieldNameValidator getFieldNameValidator() {
+        return new NoOpFieldNameValidator();
     }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.bulk;
 
+import com.mongodb.client.model.Collation;
 import org.bson.BsonDocument;
 
 import java.util.List;
@@ -31,10 +32,11 @@ import static java.util.Arrays.asList;
  * @mongodb.driver.manual reference/method/db.collection.ensureIndex/#options Index options
  * @since 3.0
  */
+@Deprecated
 public class IndexRequest {
     private final BsonDocument keys;
-    private static final List<Integer> VALID_TEXT_INDEX_VERSIONS = asList(1, 2);
-    private static final List<Integer> VALID_SPHERE_INDEX_VERSIONS = asList(1, 2);
+    private static final List<Integer> VALID_TEXT_INDEX_VERSIONS = asList(1, 2, 3);
+    private static final List<Integer> VALID_SPHERE_INDEX_VERSIONS = asList(1, 2, 3);
     private boolean background;
     private boolean unique;
     private String name;
@@ -52,6 +54,9 @@ public class IndexRequest {
     private Double bucketSize;
     private boolean dropDups;
     private BsonDocument storageEngine;
+    private BsonDocument partialFilterExpression;
+    private Collation collation;
+    private BsonDocument wildcardProjection;
 
     /**
      * Construct a new instance with the given keys
@@ -297,7 +302,7 @@ public class IndexRequest {
      */
     public IndexRequest textVersion(final Integer textVersion) {
         if (textVersion != null) {
-            isTrueArgument("textVersion must be 1 or 2", VALID_TEXT_INDEX_VERSIONS.contains(textVersion));
+            isTrueArgument("textVersion must be 1, 2 or 3", VALID_TEXT_INDEX_VERSIONS.contains(textVersion));
         }
         this.textVersion = textVersion;
         return this;
@@ -320,7 +325,7 @@ public class IndexRequest {
      */
     public IndexRequest sphereVersion(final Integer sphereVersion) {
         if (sphereVersion != null) {
-            isTrueArgument("sphereIndexVersion must be 1 or 2", VALID_SPHERE_INDEX_VERSIONS.contains(sphereVersion));
+            isTrueArgument("sphereIndexVersion must be 1, 2 or 3", VALID_SPHERE_INDEX_VERSIONS.contains(sphereVersion));
         }
         this.sphereVersion = sphereVersion;
         return this;
@@ -435,6 +440,7 @@ public class IndexRequest {
         this.dropDups = dropDups;
         return this;
     }
+
     /**
      * Gets the storage engine options document for this index.
      *
@@ -448,7 +454,7 @@ public class IndexRequest {
     /**
      * Sets the storage engine options document for this index.
      *
-     * @param storageEngineOptions the storate engine options
+     * @param storageEngineOptions the storage engine options
      * @return this
      * @mongodb.server.release 3.0
      */
@@ -457,4 +463,78 @@ public class IndexRequest {
         return this;
     }
 
+    /**
+     * Get the filter expression for the documents to be included in the index or null if not set
+     *
+     * @return the filter expression for the documents to be included in the index or null if not set
+     * @mongodb.server.release 3.2
+     * @mongodb.driver.manual /core/index-partial/ Partial Indexes
+     * @since 3.2
+     */
+    public BsonDocument getPartialFilterExpression() {
+        return partialFilterExpression;
+    }
+
+    /**
+     * Sets the filter expression for the documents to be included in the index
+     *
+     * @param partialFilterExpression the filter expression for the documents to be included in the index
+     * @return this
+     * @mongodb.server.release 3.2
+     * @mongodb.driver.manual /core/index-partial/ Partial Indexes
+     * @since 3.2
+     */
+    public IndexRequest partialFilterExpression(final BsonDocument partialFilterExpression) {
+        this.partialFilterExpression = partialFilterExpression;
+        return this;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @mongodb.server.release 3.4
+     * @since 3.4
+     */
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @mongodb.server.release 3.4
+     * @since 3.4
+     */
+    public IndexRequest collation(final Collation collation) {
+        this.collation = collation;
+        return this;
+    }
+
+    /**
+     * Gets the wildcard projection of a wildcard index
+     *
+     * @return the wildcard projection
+     * @mongodb.server.release 4.2
+     * @since 3.10
+     */
+    public BsonDocument getWildcardProjection() {
+        return wildcardProjection;
+    }
+
+    /**
+     * Sets the wildcard projection of a wildcard index
+     *
+     * @param wildcardProjection the wildcard projection
+     * @return this
+     * @mongodb.server.release 4.2
+     * @since 3.10
+     */
+    public IndexRequest wildcardProjection(final BsonDocument wildcardProjection) {
+        this.wildcardProjection = wildcardProjection;
+        return this;
+    }
 }

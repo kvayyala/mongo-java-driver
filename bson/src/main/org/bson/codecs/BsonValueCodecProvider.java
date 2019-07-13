@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.bson.BsonBinary;
 import org.bson.BsonBoolean;
 import org.bson.BsonDateTime;
 import org.bson.BsonDbPointer;
+import org.bson.BsonDecimal128;
 import org.bson.BsonDocument;
 import org.bson.BsonDocumentWrapper;
 import org.bson.BsonDouble;
@@ -43,7 +44,6 @@ import org.bson.RawBsonDocument;
 import org.bson.codecs.configuration.CodecProvider;
 import org.bson.codecs.configuration.CodecRegistry;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -53,7 +53,7 @@ import java.util.Map;
  * @since 3.0
  */
 public class BsonValueCodecProvider implements CodecProvider {
-    private static final Map<BsonType, Class<? extends BsonValue>> DEFAULT_BSON_TYPE_CLASS_MAP;
+    private static final BsonTypeClassMap DEFAULT_BSON_TYPE_CLASS_MAP;
 
     private final Map<Class<?>, Codec<?>> codecs = new HashMap<Class<?>, Codec<?>>();
 
@@ -69,8 +69,19 @@ public class BsonValueCodecProvider implements CodecProvider {
      * @param bsonType the BsonType
      * @return the class associated with the given type
      */
+    @SuppressWarnings("unchecked")
     public static Class<? extends BsonValue> getClassForBsonType(final BsonType bsonType) {
-        return DEFAULT_BSON_TYPE_CLASS_MAP.get(bsonType);
+        return (Class<? extends BsonValue>) DEFAULT_BSON_TYPE_CLASS_MAP.get(bsonType);
+    }
+
+    /**
+     * Gets the BsonTypeClassMap used by this provider.
+     *
+     * @return the non-null BsonTypeClassMap
+     * @since 3.3
+     */
+    public static BsonTypeClassMap getBsonTypeClassMap() {
+        return DEFAULT_BSON_TYPE_CLASS_MAP;
     }
 
     @Override
@@ -80,12 +91,12 @@ public class BsonValueCodecProvider implements CodecProvider {
             return (Codec<T>) codecs.get(clazz);
         }
 
-        if (clazz == BsonArray.class) {
-            return (Codec<T>) new BsonArrayCodec(registry);
+        if (clazz == BsonJavaScriptWithScope.class) {
+            return (Codec<T>) new BsonJavaScriptWithScopeCodec(registry.get(BsonDocument.class));
         }
 
-        if (clazz == BsonDocument.class) {
-            return (Codec<T>) new BsonDocumentCodec(registry);
+        if (clazz == BsonValue.class) {
+            return (Codec<T>) new BsonValueCodec(registry);
         }
 
         if (clazz == BsonDocumentWrapper.class) {
@@ -96,12 +107,12 @@ public class BsonValueCodecProvider implements CodecProvider {
             return (Codec<T>) new RawBsonDocumentCodec();
         }
 
-        if (clazz == BsonJavaScriptWithScope.class) {
-            return (Codec<T>) new BsonJavaScriptWithScopeCodec(registry.get(BsonDocument.class));
+        if (BsonDocument.class.isAssignableFrom(clazz)) {
+            return (Codec<T>) new BsonDocumentCodec(registry);
         }
 
-        if (clazz == BsonValue.class) {
-            return (Codec<T>) new BsonValueCodec(registry);
+        if (BsonArray.class.isAssignableFrom(clazz)) {
+            return (Codec<T>) new BsonArrayCodec(registry);
         }
 
         return null;
@@ -116,6 +127,7 @@ public class BsonValueCodecProvider implements CodecProvider {
         addCodec(new BsonDoubleCodec());
         addCodec(new BsonInt32Codec());
         addCodec(new BsonInt64Codec());
+        addCodec(new BsonDecimal128Codec());
         addCodec(new BsonMinKeyCodec());
         addCodec(new BsonMaxKeyCodec());
         addCodec(new BsonJavaScriptCodec());
@@ -132,7 +144,7 @@ public class BsonValueCodecProvider implements CodecProvider {
     }
 
     static {
-        Map<BsonType, Class<? extends BsonValue>> map = new HashMap<BsonType, Class<? extends BsonValue>>();
+        Map<BsonType, Class<?>> map = new HashMap<BsonType, Class<?>>();
 
         map.put(BsonType.NULL, BsonNull.class);
         map.put(BsonType.ARRAY, BsonArray.class);
@@ -144,6 +156,7 @@ public class BsonValueCodecProvider implements CodecProvider {
         map.put(BsonType.DOUBLE, BsonDouble.class);
         map.put(BsonType.INT32, BsonInt32.class);
         map.put(BsonType.INT64, BsonInt64.class);
+        map.put(BsonType.DECIMAL128, BsonDecimal128.class);
         map.put(BsonType.MAX_KEY, BsonMaxKey.class);
         map.put(BsonType.MIN_KEY, BsonMinKey.class);
         map.put(BsonType.JAVASCRIPT, BsonJavaScript.class);
@@ -155,6 +168,6 @@ public class BsonValueCodecProvider implements CodecProvider {
         map.put(BsonType.TIMESTAMP, BsonTimestamp.class);
         map.put(BsonType.UNDEFINED, BsonUndefined.class);
 
-        DEFAULT_BSON_TYPE_CLASS_MAP = Collections.unmodifiableMap(map);
+        DEFAULT_BSON_TYPE_CLASS_MAP = new BsonTypeClassMap(map);
     }
 }

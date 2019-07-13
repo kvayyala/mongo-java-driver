@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@
 package com.mongodb.internal.connection;
 
 import com.mongodb.connection.BufferProvider;
+import com.mongodb.internal.connection.ConcurrentPool.Prune;
 import org.bson.ByteBuf;
 import org.bson.ByteBufNIO;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HashMap;
@@ -47,14 +49,13 @@ public class PowerOfTwoBufferPool implements BufferProvider {
      * @param highestPowerOfTwo the highest power of two buffer size that will be pooled
      */
     public PowerOfTwoBufferPool(final int highestPowerOfTwo) {
-        int x = 1;
+        int powerOfTwo = 1;
         for (int i = 0; i <= highestPowerOfTwo; i++) {
-            final int size = x;
-            // TODO: Determine max size of each pool.
-            powerOfTwoToPoolMap.put(size, new ConcurrentPool<ByteBuffer>(Integer.MAX_VALUE,
+            final int size = powerOfTwo;
+            powerOfTwoToPoolMap.put(i, new ConcurrentPool<ByteBuffer>(Integer.MAX_VALUE,
                                                                          new ConcurrentPool.ItemFactory<ByteBuffer>() {
                                                                              @Override
-                                                                             public ByteBuffer create() {
+                                                                             public ByteBuffer create(final boolean initialize) {
                                                                                  return createNew(size);
                                                                              }
 
@@ -63,21 +64,21 @@ public class PowerOfTwoBufferPool implements BufferProvider {
                                                                              }
 
                                                                              @Override
-                                                                             public boolean shouldPrune(final ByteBuffer byteBuffer) {
-                                                                                 return false;
+                                                                             public Prune shouldPrune(final ByteBuffer byteBuffer) {
+                                                                                 return Prune.STOP;
                                                                              }
                                                                          }));
-            x = x << 1;
+            powerOfTwo = powerOfTwo << 1;
         }
     }
 
     @Override
     public ByteBuf getBuffer(final int size) {
-        ConcurrentPool<ByteBuffer> pool = powerOfTwoToPoolMap.get(roundUpToNextHighestPowerOfTwo(size));
+        ConcurrentPool<ByteBuffer> pool = powerOfTwoToPoolMap.get(log2(roundUpToNextHighestPowerOfTwo(size)));
         ByteBuffer byteBuffer = (pool == null) ? createNew(size) : pool.get();
 
-        byteBuffer.clear();
-        byteBuffer.limit(size);
+        ((Buffer) byteBuffer).clear();
+        ((Buffer) byteBuffer).limit(size);
         return new PooledByteBufNIO(byteBuffer);
     }
 
@@ -88,10 +89,14 @@ public class PowerOfTwoBufferPool implements BufferProvider {
     }
 
     private void release(final ByteBuffer buffer) {
-        ConcurrentPool<ByteBuffer> pool = powerOfTwoToPoolMap.get(roundUpToNextHighestPowerOfTwo(buffer.capacity()));
+        ConcurrentPool<ByteBuffer> pool = powerOfTwoToPoolMap.get(log2(roundUpToNextHighestPowerOfTwo(buffer.capacity())));
         if (pool != null) {
             pool.release(buffer);
         }
+    }
+
+    static int log2(final int powerOfTwo) {
+        return 31 - Integer.numberOfLeadingZeros(powerOfTwo);
     }
 
     static int roundUpToNextHighestPowerOfTwo(final int size) {
@@ -108,7 +113,7 @@ public class PowerOfTwoBufferPool implements BufferProvider {
 
     private class PooledByteBufNIO extends ByteBufNIO {
 
-        public PooledByteBufNIO(final ByteBuffer buf) {
+        PooledByteBufNIO(final ByteBuffer buf) {
             super(buf);
         }
 

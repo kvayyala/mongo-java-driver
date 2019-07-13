@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,18 @@
 
 package com.mongodb.async.client;
 
+import com.mongodb.lang.Nullable;
+import org.bson.conversions.Bson;
+
 import java.util.concurrent.TimeUnit;
 
 /**
  * Iterable for ListDatabases.
  *
  * @param <T> The type of the result.
+ * @deprecated Prefer the Reactive Streams-based asynchronous driver (mongodb-driver-reactivestreams artifactId)
  */
+@Deprecated
 public interface ListDatabasesIterable<T> extends MongoIterable<T> {
 
     /**
@@ -43,4 +48,25 @@ public interface ListDatabasesIterable<T> extends MongoIterable<T> {
      * @mongodb.driver.manual reference/method/cursor.batchSize/#cursor.batchSize Batch Size
      */
     ListDatabasesIterable<T> batchSize(int batchSize);
+
+    /**
+     * Sets the query filter to apply to the returned database names.
+     *
+     * @param filter the filter, which may be null.
+     * @return this
+     * @since 3.6
+     * @mongodb.server.release 3.4.2
+     */
+    ListDatabasesIterable<T> filter(@Nullable Bson filter);
+
+    /**
+     * Sets the nameOnly flag that indicates whether the command should return just the database names or return the database names and
+     * size information.
+     *
+     * @param nameOnly the nameOnly flag, which may be null
+     * @return this
+     * @since 3.6
+     * @mongodb.server.release 3.4.3
+     */
+    ListDatabasesIterable<T> nameOnly(@Nullable Boolean nameOnly);
 }

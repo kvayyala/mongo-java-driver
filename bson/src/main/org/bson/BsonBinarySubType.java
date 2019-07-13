@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -59,6 +59,17 @@ public enum BsonBinarySubType {
 
     private final byte value;
 
+    /**
+     * Returns true if the given value is a UUID subtype
+     *
+     * @param value the subtype value as a byte
+     * @return true if value is a UUID subtype
+     * @since 3.4
+     */
+    public static boolean isUuid(final byte value) {
+        return value == UUID_LEGACY.getValue() || value == UUID_STANDARD.getValue();
+    }
+
     BsonBinarySubType(final byte value) {
         this.value = value;
     }
@@ -71,5 +82,4 @@ public enum BsonBinarySubType {
     public byte getValue() {
         return value;
     }
-
 }

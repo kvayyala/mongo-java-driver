@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,4 +45,10 @@ public class RenameCollectionOptions {
         return this;
     }
 
+    @Override
+    public String toString() {
+        return "RenameCollectionOptions{"
+                + "dropTarget=" + dropTarget
+                + '}';
+    }
 }

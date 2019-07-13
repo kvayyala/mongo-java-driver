@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import com.mongodb.connection.ServerDescription;
 import java.util.List;
 
 /**
- * <p>An interface for selecting a server from a cluster according some preference.</p>
+ * <p>An interface for selecting a server from a cluster according to some preference.</p>
  *
  * <p>Implementations of this interface should ensure that their equals and hashCode methods compare equal preferences as equal, as users of
  * this interface may rely on that behavior to efficiently consolidate handling of multiple requests waiting on a server that can satisfy

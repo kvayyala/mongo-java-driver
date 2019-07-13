@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,16 +28,10 @@ import static org.bson.assertions.Assertions.notNull;
 
 
 class BsonArrayWrapper<T> extends BsonArray {
-    private static final long serialVersionUID = 3213553338060799471L;
 
     private final List<T> wrappedArray;
 
-    /**
-     * Construct a new instance with the given array and encoder for the document.
-     *
-     * @param wrappedArray the wrapped array
-     */
-    public BsonArrayWrapper(final List<T> wrappedArray) {
+    BsonArrayWrapper(final List<T> wrappedArray) {
         this.wrappedArray = notNull("wrappedArray", wrappedArray);
     }
 
@@ -199,5 +193,10 @@ class BsonArrayWrapper<T> extends BsonArray {
         return "BsonArrayWrapper{"
                 + "wrappedArray=" + wrappedArray
                 + '}';
+    }
+
+    @Override
+    public BsonArray clone() {
+        throw new UnsupportedOperationException("This should never be called on an instance of this type");
     }
 }

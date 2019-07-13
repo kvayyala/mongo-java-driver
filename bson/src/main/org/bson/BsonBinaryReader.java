@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@
 package org.bson;
 
 import org.bson.io.BsonInput;
+import org.bson.io.BsonInputMark;
 import org.bson.io.ByteBufferBsonInput;
+import org.bson.types.Decimal128;
 import org.bson.types.ObjectId;
 
 import java.nio.ByteBuffer;
@@ -87,7 +89,15 @@ public class BsonBinaryReader extends AbstractBsonReader {
             throwInvalidState("ReadBSONType", State.TYPE);
         }
 
-        setCurrentBsonType(BsonType.findByValue(bsonInput.readByte()));
+        byte bsonTypeByte = bsonInput.readByte();
+        BsonType bsonType = BsonType.findByValue(bsonTypeByte);
+        if (bsonType == null) {
+            String name = bsonInput.readCString();
+            throw new BsonSerializationException(format("Detected unknown BSON type \"\\x%x\" for fieldname \"%s\". "
+                    + "Are you using the latest driver version?",
+                    bsonTypeByte, name));
+        }
+        setCurrentBsonType(bsonType);
 
         if (getCurrentBsonType() == BsonType.END_OF_DOCUMENT) {
             switch (getContext().getContextType()) {
@@ -100,7 +110,7 @@ public class BsonBinaryReader extends AbstractBsonReader {
                     return BsonType.END_OF_DOCUMENT;
                 default:
                     throw new BsonSerializationException(format("BSONType EndOfDocument is not valid when ContextType is %s.",
-                                                                getContext().getContextType()));
+                            getContext().getContextType()));
             }
         } else {
             switch (getContext().getContextType()) {
@@ -123,11 +133,14 @@ public class BsonBinaryReader extends AbstractBsonReader {
 
     @Override
     protected BsonBinary doReadBinaryData() {
-        int numBytes = bsonInput.readInt32();
+        int numBytes = readSize();
         byte type = bsonInput.readByte();
 
         if (type == BsonBinarySubType.OLD_BINARY.getValue()) {
-            bsonInput.readInt32();
+            int repeatedNumBytes = bsonInput.readInt32();
+            if (repeatedNumBytes != numBytes - 4) {
+                throw new BsonSerializationException("Binary sub type OldBinary has inconsistent sizes");
+            }
             numBytes -= 4;
         }
         byte[] bytes = new byte[numBytes];
@@ -138,15 +151,27 @@ public class BsonBinaryReader extends AbstractBsonReader {
     @Override
     protected byte doPeekBinarySubType() {
         mark();
-        bsonInput.readInt32();
+        readSize();
         byte type = bsonInput.readByte();
         reset();
         return type;
     }
 
     @Override
+    protected int doPeekBinarySize() {
+        mark();
+        int size = readSize();
+        reset();
+        return size;
+    }
+
+    @Override
     protected boolean doReadBoolean() {
-        return bsonInput.readByte() == 0x1;
+        byte booleanByte = bsonInput.readByte();
+        if (booleanByte != 0 && booleanByte != 1) {
+            throw new BsonSerializationException(format("Expected a boolean value but found %d", booleanByte));
+        }
+        return booleanByte == 0x1;
     }
 
     @Override
@@ -167,6 +192,13 @@ public class BsonBinaryReader extends AbstractBsonReader {
     @Override
     protected long doReadInt64() {
         return bsonInput.readInt64();
+    }
+
+    @Override
+    public Decimal128 doReadDecimal128() {
+        long low = bsonInput.readInt64();
+        long high = bsonInput.readInt64();
+        return Decimal128.fromIEEE754BIDEncoding(high, low);
     }
 
     @Override
@@ -221,9 +253,7 @@ public class BsonBinaryReader extends AbstractBsonReader {
 
     @Override
     protected BsonTimestamp doReadTimestamp() {
-        int increment = bsonInput.readInt32();
-        int time = bsonInput.readInt32();
-        return new BsonTimestamp(time, increment);
+        return new BsonTimestamp(bsonInput.readInt64());
     }
 
     @Override
@@ -240,7 +270,7 @@ public class BsonBinaryReader extends AbstractBsonReader {
     @Override
     protected void doReadStartDocument() {
         BsonContextType contextType = (getState() == State.SCOPE_DOCUMENT)
-                                      ? BsonContextType.SCOPE_DOCUMENT : BsonContextType.DOCUMENT;
+                ? BsonContextType.SCOPE_DOCUMENT : BsonContextType.DOCUMENT;
         int startPosition = bsonInput.getPosition(); // position of size field
         int size = readSize();
         setContext(new Context(getContext(), contextType, startPosition, size));
@@ -298,6 +328,9 @@ public class BsonBinaryReader extends AbstractBsonReader {
             case INT64:
                 skip = 8;
                 break;
+            case DECIMAL128:
+                skip = 16;
+                break;
             case JAVASCRIPT:
                 skip = readSize();
                 break;
@@ -333,6 +366,9 @@ public class BsonBinaryReader extends AbstractBsonReader {
             case UNDEFINED:
                 skip = 0;
                 break;
+            case DB_POINTER:
+                skip = readSize() + 12;   // String followed by ObjectId
+                break;
             default:
                 throw new BSONException("Unexpected BSON type: " + getCurrentBsonType());
         }
@@ -353,14 +389,22 @@ public class BsonBinaryReader extends AbstractBsonReader {
     protected Context getContext() {
         return (Context) super.getContext();
     }
+
+    @Deprecated
     @Override
     public void mark() {
         if (mark != null) {
-             throw new BSONException("A mark already exists; it needs to be reset before creating a new one");
+            throw new BSONException("A mark already exists; it needs to be reset before creating a new one");
         }
         mark = new Mark();
     }
 
+    @Override
+    public BsonReaderMark getMark() {
+        return new Mark();
+    }
+
+    @Deprecated
     @Override
     public void reset() {
         if (mark == null) {
@@ -371,19 +415,20 @@ public class BsonBinaryReader extends AbstractBsonReader {
     }
 
     protected class Mark extends AbstractBsonReader.Mark {
-        private int startPosition;
-        private int size;
+        private final int startPosition;
+        private final int size;
+        private final BsonInputMark bsonInputMark;
 
         protected Mark() {
             super();
             startPosition = BsonBinaryReader.this.getContext().startPosition;
             size = BsonBinaryReader.this.getContext().size;
-            BsonBinaryReader.this.bsonInput.mark(Integer.MAX_VALUE);
+            bsonInputMark = BsonBinaryReader.this.bsonInput.getMark(Integer.MAX_VALUE);
         }
 
-        protected void reset() {
+        public void reset() {
             super.reset();
-            BsonBinaryReader.this.bsonInput.reset();
+            bsonInputMark.reset();
             BsonBinaryReader.this.setContext(new Context((Context) getParentContext(), getContextType(), startPosition, size));
         }
     }

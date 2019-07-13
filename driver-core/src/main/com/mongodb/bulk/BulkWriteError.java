@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,8 +69,8 @@ public class BulkWriteError extends WriteError {
 
     @Override
     public int hashCode() {
-        int result = index;
-        result = 31 * super.hashCode();
+        int result = super.hashCode();
+        result = 31 * result + index;
         return result;
     }
 

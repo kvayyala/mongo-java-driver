@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 package com.mongodb.client.model
 
 import org.bson.BsonDocument
-import org.bson.BsonInt32
-import org.bson.BsonString
 import spock.lang.Specification
 
 import java.util.concurrent.TimeUnit
@@ -46,16 +44,23 @@ class IndexOptionsSpecification extends Specification {
         options.getMax() == null
         options.getBucketSize() == null
         options.getStorageEngine() == null
+        options.getPartialFilterExpression() == null
+        options.getCollation() == null
+        options.getWildcardProjection() == null
+        def wildcardProjection = BsonDocument.parse('{a  : 1}')
 
         when:
-        def options2 = new IndexOptions()
-                .background(true)
+        def weights = BsonDocument.parse('{ a: 1000 }')
+        def storageEngine = BsonDocument.parse('{ wiredTiger : { configString : "block_compressor=zlib" }}')
+        def partialFilterExpression = BsonDocument.parse('{ a: { $gte: 10 } }')
+        def collation = Collation.builder().locale('en').build()
+        options.background(true)
                 .unique(true)
                 .sparse(true)
                 .name('aIndex')
                 .expireAfter(100, TimeUnit.SECONDS)
                 .version(1)
-                .weights(new BsonDocument('a', new BsonInt32(1000)))
+                .weights(weights)
                 .defaultLanguage('es')
                 .languageOverride('language')
                 .textVersion(1)
@@ -64,65 +69,31 @@ class IndexOptionsSpecification extends Specification {
                 .min(-180.0)
                 .max(180.0)
                 .bucketSize(200.0)
-                .storageEngine(new BsonDocument('wiredTiger',
-                                                new BsonDocument('configString', new BsonString('block_compressor=zlib'))))
+                .storageEngine(storageEngine)
+                .partialFilterExpression(partialFilterExpression)
+                .collation(collation)
+                .wildcardProjection(wildcardProjection)
 
         then:
-        options2.isBackground()
-        options2.isUnique()
-        options2.isSparse()
-        options2.getName() == 'aIndex'
-        options2.getExpireAfter(TimeUnit.SECONDS) == 100
-        options2.getVersion() == 1
-        options2.getWeights() == new BsonDocument('a', new BsonInt32(1000))
-        options2.getDefaultLanguage() == 'es'
-        options2.getLanguageOverride() == 'language'
-        options2.getTextVersion() == 1
-        options2.getSphereVersion() == 2
-        options2.getBits() == 1
-        options2.getMin() == -180.0
-        options2.getMax() == 180.0
-        options2.getBucketSize() == 200.0
-    }
-
-    def 'should validate textIndexVersion'() {
-        when:
-        new IndexOptions().textVersion(1)
-
-        then:
-        notThrown(IllegalArgumentException)
-
-        when:
-        new IndexOptions().textVersion(2)
-
-        then:
-        notThrown(IllegalArgumentException)
-
-        when:
-        new IndexOptions().textVersion(3)
-
-        then:
-        thrown(IllegalArgumentException)
-    }
-
-    def 'should validate 2dsphereIndexVersion'() {
-        when:
-        new IndexOptions().sphereVersion(1)
-
-        then:
-        notThrown(IllegalArgumentException)
-
-        when:
-        new IndexOptions().sphereVersion(2)
-
-        then:
-        notThrown(IllegalArgumentException)
-
-        when:
-        new IndexOptions().sphereVersion(3)
-
-        then:
-        thrown(IllegalArgumentException)
+        options.isBackground()
+        options.isUnique()
+        options.isSparse()
+        options.getName() == 'aIndex'
+        options.getExpireAfter(TimeUnit.SECONDS) == 100
+        options.getVersion() == 1
+        options.getWeights() == weights
+        options.getDefaultLanguage() == 'es'
+        options.getLanguageOverride() == 'language'
+        options.getTextVersion() == 1
+        options.getSphereVersion() == 2
+        options.getBits() == 1
+        options.getMin() == -180.0
+        options.getMax() == 180.0
+        options.getBucketSize() == 200.0
+        options.getStorageEngine() == storageEngine
+        options.getPartialFilterExpression() == partialFilterExpression
+        options.getCollation() == collation
+        options.getWildcardProjection() == wildcardProjection
     }
 
     def 'should convert expireAfter'() {
@@ -149,6 +120,5 @@ class IndexOptionsSpecification extends Specification {
 
         then:
         options.getExpireAfter(TimeUnit.SECONDS) == 1
-
     }
 }

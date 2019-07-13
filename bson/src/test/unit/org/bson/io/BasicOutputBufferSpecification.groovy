@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -307,6 +307,28 @@ class BasicOutputBufferSpecification extends Specification {
         getBytes(bsonOutput) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as byte[]
         bsonOutput.position == 10
         bsonOutput.size == 10
+    }
+
+    def 'should get byte buffer as little endian'() {
+        given:
+        def bsonOutput = new BasicOutputBuffer(4)
+
+        when:
+        bsonOutput.writeBytes([1, 0, 0, 0] as byte[])
+
+        then:
+        bsonOutput.getByteBuffers()[0].getInt() == 1
+    }
+
+    def 'should get internal buffer'() {
+        given:
+        def bsonOutput = new BasicOutputBuffer(4)
+
+        when:
+        bsonOutput.writeBytes([1, 2] as byte[])
+
+        then:
+        bsonOutput.getInternalBuffer() == [1, 2, 0, 0] as byte[]
     }
 
     def 'should close'() {

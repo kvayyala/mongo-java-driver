@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package com.mongodb.connection;
 
 import com.mongodb.MongoCredential;
 import com.mongodb.event.ClusterListener;
-import com.mongodb.event.ConnectionListener;
 import com.mongodb.event.ConnectionPoolListener;
 
 import java.util.List;
@@ -28,6 +27,7 @@ import java.util.List;
  *
  * @since 3.0
  */
+@Deprecated
 public interface ClusterFactory {
 
     // CHECKSTYLE:OFF
@@ -47,6 +47,7 @@ public interface ClusterFactory {
      * @param connectionListener       an optional listener for connection-related events
      * @return the cluster
      */
+    @SuppressWarnings("deprecation")
     Cluster create(ClusterSettings settings,
                    ServerSettings serverSettings,
                    ConnectionPoolSettings connectionPoolSettings,
@@ -55,7 +56,7 @@ public interface ClusterFactory {
                    List<MongoCredential> credentialList,
                    ClusterListener clusterListener,
                    ConnectionPoolListener connectionPoolListener,
-                   ConnectionListener connectionListener);
+                   com.mongodb.event.ConnectionListener connectionListener);
 
     // CHECKSTYLE:ON
 }

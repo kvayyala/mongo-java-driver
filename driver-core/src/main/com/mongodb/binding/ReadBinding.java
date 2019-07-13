@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,14 @@
 package com.mongodb.binding;
 
 import com.mongodb.ReadPreference;
+import com.mongodb.session.SessionContext;
 
 /**
  * A factory of connection sources to servers that can be read from and that satisfy the specified read preference.
  *
  * @since 3.0
  */
+@Deprecated
 public interface ReadBinding extends ReferenceCounted {
     /**
      * The read preference that all connection sources returned by this instance will satisfy.
@@ -35,6 +37,15 @@ public interface ReadBinding extends ReferenceCounted {
      * @return the connection source
      */
     ConnectionSource getReadConnectionSource();
+
+    /**
+     * Gets the session context for this binding.
+     *
+     * @return the session context, which may not be null
+     *
+     * @since 3.6
+     */
+    SessionContext getSessionContext();
 
     @Override
     ReadBinding retain();

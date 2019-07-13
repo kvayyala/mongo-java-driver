@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONObjectITIONS OF ANY KINObject, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -19,15 +19,13 @@ package com.mongodb.client.model
 import com.mongodb.client.model.geojson.Point
 import com.mongodb.client.model.geojson.Polygon
 import com.mongodb.client.model.geojson.Position
-import com.mongodb.client.model.geojson.codecs.GeoJsonCodecProvider
 import org.bson.BsonArray
 import org.bson.BsonDocument
 import org.bson.BsonInt32
 import org.bson.BsonInt64
+import org.bson.BsonString
 import org.bson.BsonType
-import org.bson.codecs.BsonValueCodecProvider
-import org.bson.codecs.ValueCodecProvider
-import org.bson.conversions.Bson
+import org.bson.Document
 import spock.lang.Specification
 
 import java.util.regex.Pattern
@@ -35,9 +33,15 @@ import java.util.regex.Pattern
 import static Filters.and
 import static Filters.exists
 import static Filters.or
+import static com.mongodb.client.model.BsonHelper.toBson
 import static com.mongodb.client.model.Filters.all
+import static com.mongodb.client.model.Filters.bitsAllClear
+import static com.mongodb.client.model.Filters.bitsAllSet
+import static com.mongodb.client.model.Filters.bitsAnyClear
+import static com.mongodb.client.model.Filters.bitsAnySet
 import static com.mongodb.client.model.Filters.elemMatch
 import static com.mongodb.client.model.Filters.eq
+import static com.mongodb.client.model.Filters.expr
 import static com.mongodb.client.model.Filters.geoIntersects
 import static com.mongodb.client.model.Filters.geoWithin
 import static com.mongodb.client.model.Filters.geoWithinBox
@@ -46,10 +50,13 @@ import static com.mongodb.client.model.Filters.geoWithinCenterSphere
 import static com.mongodb.client.model.Filters.geoWithinPolygon
 import static com.mongodb.client.model.Filters.gt
 import static com.mongodb.client.model.Filters.gte
+import static com.mongodb.client.model.Filters.jsonSchema
 import static com.mongodb.client.model.Filters.lt
 import static com.mongodb.client.model.Filters.lte
 import static com.mongodb.client.model.Filters.mod
 import static com.mongodb.client.model.Filters.ne
+import static com.mongodb.client.model.Filters.near
+import static com.mongodb.client.model.Filters.nearSphere
 import static com.mongodb.client.model.Filters.nin
 import static com.mongodb.client.model.Filters.nor
 import static com.mongodb.client.model.Filters.not
@@ -58,17 +65,15 @@ import static com.mongodb.client.model.Filters.size
 import static com.mongodb.client.model.Filters.text
 import static com.mongodb.client.model.Filters.type
 import static com.mongodb.client.model.Filters.where
-import static java.util.Arrays.asList
 import static org.bson.BsonDocument.parse
-import static org.bson.codecs.configuration.CodecRegistries.fromProviders
 
 class FiltersSpecification extends Specification {
-    def registry = fromProviders([new BsonValueCodecProvider(), new ValueCodecProvider(), new GeoJsonCodecProvider()])
 
     def 'eq should render without $eq'() {
         expect:
         toBson(eq('x', 1)) == parse('{x : 1}')
         toBson(eq('x', null)) == parse('{x : null}')
+        toBson(eq(1)) == parse('{_id : 1}')
     }
 
     def 'should render $ne'() {
@@ -91,7 +96,11 @@ class FiltersSpecification extends Specification {
         toBson(not(or(eq('x', 1), eq('x', 2)))) == parse('{$not: {$or: [{x: 1}, {x: 2}]}}')
         toBson(not(or(Filters.in('x', 1, 2), eq('x', 3)))) == parse('{$not: {$or: [{x: {$in: [1, 2]}}, {x: 3}]}}')
 
-        toBson(not(new BsonDocument('$in', new BsonArray(asList(new BsonInt32(1)))))) == parse('{$not: {$in: [1]}}')
+        toBson(not(parse('{$in: [1]}'))) == parse('{$not: {$in: [1]}}')
+
+        toBson(not(eq('x', parse('{a: 1, b: 1}')))) == parse('{x: {$not: {$eq: {"a": 1, "b": 1}}}}')
+        toBson(not(eq('x', parse('{$ref: "1", $id: "1"}')))) == parse('{x: {$not: {$eq: {"$ref": "1", "$id": "1"}}}}')
+        toBson(not(eq('x', parse('{$ref: "1", $id: "1", $db: "db"}')))) == parse('{x: {$not: {$eq: {"$ref": "1", "$id": "1", $db: "db"}}}}')
     }
 
     def 'should render $nor'() {
@@ -177,10 +186,10 @@ class FiltersSpecification extends Specification {
     def 'should render $elemMatch'() {
         expect:
         toBson(elemMatch('results', new BsonDocument('$gte', new BsonInt32(80)).append('$lt', new BsonInt32(85)))) ==
-        parse('{results : {$elemMatch : {$gte: 80, $lt: 85}}}')
+                parse('{results : {$elemMatch : {$gte: 80, $lt: 85}}}')
 
         toBson(elemMatch('results', and(eq('product', 'xyz'), gt('score', 8)))) ==
-        parse('{ results : {$elemMatch : {product : "xyz", score : {$gt : 8}}}}')
+                parse('{ results : {$elemMatch : {product : "xyz", score : {$gt : 8}}}}')
     }
 
     def 'should render $in'() {
@@ -205,27 +214,68 @@ class FiltersSpecification extends Specification {
         toBson(size('a', 13)) == parse('{a : {$size : 13} }')
     }
 
+    def 'should render $bitsAllClear'() {
+        expect:
+        toBson(bitsAllClear('a', 13)) == parse('{a : {$bitsAllClear : { "$numberLong" : "13" }} }')
+    }
+
+    def 'should render $bitsAllSet'() {
+        expect:
+        toBson(bitsAllSet('a', 13)) == parse('{a : {$bitsAllSet : { "$numberLong" : "13" }} }')
+    }
+
+    def 'should render $bitsAnyClear'() {
+        expect:
+        toBson(bitsAnyClear('a', 13)) == parse('{a : {$bitsAnyClear : { "$numberLong" : "13" }} }')
+    }
+
+    def 'should render $bitsAnySet'() {
+        expect:
+        toBson(bitsAnySet('a', 13)) == parse('{a : {$bitsAnySet : { "$numberLong" : "13" }} }')
+    }
+
     def 'should render $type'() {
         expect:
         toBson(type('a', BsonType.ARRAY)) == parse('{a : {$type : 4} }')
+        toBson(type('a', 'number')) == parse('{a : {$type : "number"} }')
     }
 
+    @SuppressWarnings('deprecation')
     def 'should render $text'() {
         expect:
-        toBson(text('I love MongoDB')) == parse('{$text : {$search : "I love MongoDB"} }')
-        toBson(text('I love MongoDB', 'English')) == parse('{$text : {$search : "I love MongoDB", $language : "English"} }')
+        toBson(text('mongoDB for GIANT ideas')) == parse('{$text: {$search: "mongoDB for GIANT ideas"} }')
+        toBson(text('mongoDB for GIANT ideas', 'english')) == parse('{$text: {$search: "mongoDB for GIANT ideas", $language : "english"}}')
+        toBson(text('mongoDB for GIANT ideas', new TextSearchOptions().language('english'))) == parse('''
+            {$text : {$search : "mongoDB for GIANT ideas", $language : "english"} }'''
+        )
+        toBson(text('mongoDB for GIANT ideas', new TextSearchOptions().caseSensitive(true))) == parse('''
+            {$text : {$search : "mongoDB for GIANT ideas", $caseSensitive : true} }'''
+        )
+        toBson(text('mongoDB for GIANT ideas', new TextSearchOptions().diacriticSensitive(false))) == parse('''
+            {$text : {$search : "mongoDB for GIANT ideas", $diacriticSensitive : false} }'''
+        )
+        toBson(text('mongoDB for GIANT ideas', new TextSearchOptions().language('english').caseSensitive(false)
+                .diacriticSensitive(true))) == parse('''
+            {$text : {$search : "mongoDB for GIANT ideas", $language : "english", $caseSensitive : false, $diacriticSensitive : true} }'''
+        )
     }
 
     def 'should render $regex'() {
         expect:
-        toBson(regex('name', 'acme.*corp')) == parse('{name : {$regex : "acme.*corp"}}')
+        toBson(regex('name', 'acme.*corp')) == parse('{name : {$regex : "acme.*corp", $options : ""}}')
         toBson(regex('name', 'acme.*corp', 'si')) == parse('{name : {$regex : "acme.*corp", $options : "si"}}')
-        toBson(regex('name', Pattern.compile('acme.*corp'))) == parse('{name : {$regex : "acme.*corp"}}')
+        toBson(regex('name', Pattern.compile('acme.*corp'))) == parse('{name : {$regex : "acme.*corp", $options : ""}}')
     }
 
     def 'should render $where'() {
         expect:
         toBson(where('this.credits == this.debits')) == parse('{$where: "this.credits == this.debits"}')
+    }
+
+    def 'should render $expr'() {
+        expect:
+        toBson(expr(new BsonDocument('$gt', new BsonArray([new BsonString('$spent'), new BsonString('$budget')])))) ==
+                parse('{$expr: { $gt: [ "$spent" , "$budget" ] } }')
     }
 
     def 'should render $geoWithin'() {
@@ -358,7 +408,7 @@ class FiltersSpecification extends Specification {
         def pointDocument = parse(point.toJson())
 
         expect:
-        toBson(Filters.near('loc', point, 5000d, 1000d)) == parse('''{
+        toBson(near('loc', point, 5000d, 1000d)) == parse('''{
                                                                        loc : {
                                                                           $near: {
                                                                              $geometry: {
@@ -371,7 +421,7 @@ class FiltersSpecification extends Specification {
                                                                        }
                                                                      }''')
 
-        toBson(Filters.near('loc', point, 5000d, null)) == parse('''{
+        toBson(near('loc', point, 5000d, null)) == parse('''{
                                                                       loc : {
                                                                          $near: {
                                                                             $geometry: {
@@ -383,7 +433,7 @@ class FiltersSpecification extends Specification {
                                                                       }
                                                                     }''')
 
-        toBson(Filters.near('loc', point, null, 1000d)) == parse('''{
+        toBson(near('loc', point, null, 1000d)) == parse('''{
                                                                       loc : {
                                                                          $near: {
                                                                             $geometry: {
@@ -395,7 +445,7 @@ class FiltersSpecification extends Specification {
                                                                       }
                                                                     }''')
 
-        toBson(Filters.near('loc', pointDocument, 5000d, 1000d)) == parse('''{
+        toBson(near('loc', pointDocument, 5000d, 1000d)) == parse('''{
                                                                                loc : {
                                                                                   $near: {
                                                                                      $geometry: {
@@ -408,7 +458,7 @@ class FiltersSpecification extends Specification {
                                                                                }
                                                                              }''')
 
-        toBson(Filters.near('loc', pointDocument, 5000d, null)) == parse('''{
+        toBson(near('loc', pointDocument, 5000d, null)) == parse('''{
                                                                               loc : {
                                                                                  $near: {
                                                                                     $geometry: {
@@ -420,7 +470,7 @@ class FiltersSpecification extends Specification {
                                                                               }
                                                                             }''')
 
-        toBson(Filters.near('loc', pointDocument, null, 1000d)) == parse('''{
+        toBson(near('loc', pointDocument, null, 1000d)) == parse('''{
                                                                               loc : {
                                                                                  $near: {
                                                                                     $geometry: {
@@ -432,7 +482,7 @@ class FiltersSpecification extends Specification {
                                                                               }
                                                                             }''')
 
-        toBson(Filters.near('loc', -73.9667, 40.78, 5000d, 1000d)) == parse('''{
+        toBson(near('loc', -73.9667, 40.78, 5000d, 1000d)) == parse('''{
                                                                                  loc : {
                                                                                     $near: [-73.9667, 40.78],
                                                                                     $maxDistance: 5000.0,
@@ -441,7 +491,7 @@ class FiltersSpecification extends Specification {
                                                                                  }
                                                                                }''')
 
-        toBson(Filters.near('loc', -73.9667, 40.78, 5000d, null)) == parse('''{
+        toBson(near('loc', -73.9667, 40.78, 5000d, null)) == parse('''{
                                                                                 loc : {
                                                                                    $near: [-73.9667, 40.78],
                                                                                    $maxDistance: 5000.0,
@@ -449,7 +499,7 @@ class FiltersSpecification extends Specification {
                                                                                 }
                                                                               }''')
 
-        toBson(Filters.near('loc', -73.9667, 40.78, null, 1000d)) == parse('''{
+        toBson(near('loc', -73.9667, 40.78, null, 1000d)) == parse('''{
                                                                                 loc : {
                                                                                    $near: [-73.9667, 40.78],
                                                                                    $minDistance: 1000.0,
@@ -464,7 +514,7 @@ class FiltersSpecification extends Specification {
         def pointDocument = parse(point.toJson())
 
         expect:
-        toBson(Filters.nearSphere('loc', point, 5000d, 1000d)) == parse('''{
+        toBson(nearSphere('loc', point, 5000d, 1000d)) == parse('''{
                                                                              loc : {
                                                                                 $nearSphere: {
                                                                                    $geometry: {
@@ -477,7 +527,7 @@ class FiltersSpecification extends Specification {
                                                                              }
                                                                            }''')
 
-        toBson(Filters.nearSphere('loc', point, 5000d, null)) == parse('''{
+        toBson(nearSphere('loc', point, 5000d, null)) == parse('''{
                                                                            loc:
                                                                            {
                                                                                $nearSphere:
@@ -493,7 +543,7 @@ class FiltersSpecification extends Specification {
                                                                            }
                                                                        }''')
 
-        toBson(Filters.nearSphere('loc', point, null, 1000d)) == parse('''{
+        toBson(nearSphere('loc', point, null, 1000d)) == parse('''{
                                                                             loc : {
                                                                                $nearSphere: {
                                                                                   $geometry: {
@@ -505,7 +555,7 @@ class FiltersSpecification extends Specification {
                                                                             }
                                                                           }''')
 
-        toBson(Filters.nearSphere('loc', pointDocument, 5000d, 1000d)) == parse('''{
+        toBson(nearSphere('loc', pointDocument, 5000d, 1000d)) == parse('''{
                                                                                      loc : {
                                                                                         $nearSphere: {
                                                                                            $geometry: {
@@ -518,7 +568,7 @@ class FiltersSpecification extends Specification {
                                                                                      }
                                                                                    }''')
 
-        toBson(Filters.nearSphere('loc', pointDocument, 5000d, null)) == parse('''{
+        toBson(nearSphere('loc', pointDocument, 5000d, null)) == parse('''{
                                                                                     loc : {
                                                                                        $nearSphere: {
                                                                                           $geometry: {
@@ -530,7 +580,7 @@ class FiltersSpecification extends Specification {
                                                                                     }
                                                                                   }''')
 
-        toBson(Filters.nearSphere('loc', pointDocument, null, 1000d)) == parse('''{
+        toBson(nearSphere('loc', pointDocument, null, 1000d)) == parse('''{
                                                                                     loc : {
                                                                                        $nearSphere: {
                                                                                           $geometry: {
@@ -542,7 +592,7 @@ class FiltersSpecification extends Specification {
                                                                                     }
                                                                                   }''')
 
-        toBson(Filters.nearSphere('loc', -73.9667, 40.78, 5000d, 1000d)) == parse('''{
+        toBson(nearSphere('loc', -73.9667, 40.78, 5000d, 1000d)) == parse('''{
                                                                                        loc : {
                                                                                           $nearSphere: [-73.9667, 40.78],
                                                                                           $maxDistance: 5000.0,
@@ -551,7 +601,7 @@ class FiltersSpecification extends Specification {
                                                                                        }
                                                                                      }''')
 
-        toBson(Filters.nearSphere('loc', -73.9667, 40.78, 5000d, null)) == parse('''{
+        toBson(nearSphere('loc', -73.9667, 40.78, 5000d, null)) == parse('''{
                                                                                       loc : {
                                                                                          $nearSphere: [-73.9667, 40.78],
                                                                                          $maxDistance: 5000.0,
@@ -559,7 +609,7 @@ class FiltersSpecification extends Specification {
                                                                                       }
                                                                                     }''')
 
-        toBson(Filters.nearSphere('loc', -73.9667, 40.78, null, 1000d)) == parse('''{
+        toBson(nearSphere('loc', -73.9667, 40.78, null, 1000d)) == parse('''{
                                                                                       loc : {
                                                                                          $nearSphere: [-73.9667, 40.78],
                                                                                          $minDistance: 1000.0,
@@ -568,7 +618,213 @@ class FiltersSpecification extends Specification {
                                                                                     }''')
     }
 
-    def toBson(Bson bson) {
-        bson.toBsonDocument(BsonDocument, registry)
+    def 'should render $jsonSchema'() {
+        expect:
+        toBson(jsonSchema(new BsonDocument('bsonType', new BsonString('object')))) == parse( '''{
+                                                                                       $jsonSchema : {
+                                                                                          bsonType : "object"
+                                                                                       }
+                                                                                    }''')
+    }
+
+    def 'should render with iterable value'() {
+        expect:
+        toBson(eq('x', new Document())) == parse('''{
+                                                  x : {}
+                                               }''')
+
+        toBson(eq('x', [1, 2, 3])) == parse('''{
+                                                  x : [1, 2, 3]
+                                               }''')
+    }
+
+    def 'should create string representation for simple filter'() {
+        expect:
+        eq('x', 1).toString() == 'Filter{fieldName=\'x\', value=1}'
+    }
+
+    def 'should create string representation for regex filter'() {
+        expect:
+        regex('x', '.*').toString() == 'Operator Filter{fieldName=\'x\', operator=\'$eq\', ' +
+                'value=BsonRegularExpression{pattern=\'.*\', options=\'\'}}'
+    }
+
+    def 'should create string representation for simple operator filter'() {
+        expect:
+        gt('x', 1).toString() == 'Operator Filter{fieldName=\'x\', operator=\'$gt\', value=1}'
+    }
+
+    def 'should create string representation for compound filters'() {
+        expect:
+        and(eq('x', 1), eq('y', 2)).toString() == 'And Filter{filters=[Filter{fieldName=\'x\', value=1}, Filter{fieldName=\'y\', value=2}]}'
+        or(eq('x', 1), eq('y', 2)).toString() == 'Or Filter{filters=[Filter{fieldName=\'x\', value=1}, Filter{fieldName=\'y\', value=2}]}'
+        nor(eq('x', 1), eq('y', 2)).toString() == 'Nor Filter{filters=[Filter{fieldName=\'x\', value=1}, Filter{fieldName=\'y\', value=2}]}'
+        not(eq('x', 1)).toString() == 'Not Filter{filter=Filter{fieldName=\'x\', value=1}}'
+    }
+
+    def 'should create string representation for geo filters'() {
+        expect:
+        geoIntersects('x', new Point(new Position(1, 2))).toString() == 'Geometry Operator Filter{fieldName=\'x\', ' +
+                'operator=\'$geoIntersects\', geometry=Point{coordinate=Position{values=[1.0, 2.0]}}, maxDistance=null, minDistance=null}'
+        near('x', new Point(new Position(1, 2)), 3.0, 4.0).toString() == 'Geometry Operator Filter{fieldName=\'x\', ' +
+                'operator=\'$near\', geometry=Point{coordinate=Position{values=[1.0, 2.0]}}, maxDistance=3.0, minDistance=4.0}'
+    }
+
+    def 'should create string representation for text filter'() {
+        expect:
+        text('java', new TextSearchOptions().language('French').caseSensitive(true).diacriticSensitive(true)).toString() ==
+                'Text Filter{search=\'java\', textSearchOptions=Text Search Options{language=\'French\', caseSensitive=true, ' +
+                'diacriticSensitive=true}}'
+    }
+
+    def 'should create string representation for iterable operator filters'() {
+        expect:
+        all('x', [1, 2, 3]).toString() == 'Operator Filter{fieldName=\'x\', operator=\'$all\', value=[1, 2, 3]}'
+    }
+
+    def 'should test equals for SimpleFilter'() {
+        expect:
+        regex('x', 'acme.*corp').equals(regex('x', 'acme.*corp'))
+    }
+
+    def 'should test hashCode for SimpleFilter'() {
+        expect:
+        regex('x', 'acme.*corp').hashCode() == regex('x', 'acme.*corp').hashCode()
+    }
+
+    def 'should test equals for OperatorFilter'() {
+        expect:
+        ne('x', 1).equals(ne('x', 1))
+        exists('x').equals(exists('x', true))
+        exists('x', false).equals(exists('x', false))
+        type('a', BsonType.ARRAY).equals(type('a', BsonType.ARRAY))
+        !type('a', 'number').equals(type('a', BsonType.ARRAY))
+    }
+
+    def 'should test hashCode for OperatorFilter'() {
+        expect:
+        ne('x', 1).hashCode() == ne('x', 1).hashCode()
+        exists('x').hashCode() == exists('x', true).hashCode()
+        exists('x', false).hashCode() == exists('x', false).hashCode()
+        type('a', BsonType.ARRAY).hashCode() == type('a', BsonType.ARRAY).hashCode()
+        type('a', 'number').hashCode() != type('a', BsonType.ARRAY).hashCode()
+    }
+
+    def 'should test equals for AndFilter'() {
+        expect:
+        and([]).equals(and())
+        and([eq('x', 1), eq('y', 2)])
+                .equals(and(eq('x', 1), eq('y', 2)))
+    }
+
+    def 'should test hashCode for AndFilter'() {
+        expect:
+        and([]).hashCode() == and().hashCode()
+        and([eq('x', 1), eq('y', 2)]).hashCode() ==
+                and(eq('x', 1), eq('y', 2)).hashCode()
+    }
+
+    def 'should test equals for OrNorFilter'() {
+        expect:
+        or([]).equals(or())
+        nor(eq('x', 1), eq('x', 2)).equals(nor(eq('x', 1), eq('x', 2)))
+        !nor(eq('x', 1), eq('x', 2)).equals(or(eq('x', 1), eq('x', 2)))
+    }
+
+    def 'should test hashCode for OrNorFilter'() {
+        expect:
+        or([]).hashCode() == or().hashCode()
+        nor(eq('x', 1), eq('x', 2)).hashCode() == nor(eq('x', 1), eq('x', 2)).hashCode()
+        nor(eq('x', 1), eq('x', 2)).hashCode() != or(eq('x', 1), eq('x', 2)).hashCode()
+    }
+
+    def 'should test equals for IterableOperatorFilter'() {
+        expect:
+        Filters.in('a', [1, 2, 3]).equals(Filters.in('a', 1, 2, 3))
+        !nin('a', [1, 2, 3]).equals(nin('a', 1, 2))
+        !all('a', [1, 2, 3]).equals(nin('a', 1, 2, 3))
+        all('a', []).equals(all('a'))
+    }
+
+    def 'should test hashCode for IterableOperatorFilter'() {
+        expect:
+        Filters.in('a', [1, 2, 3]).hashCode() == Filters.in('a', 1, 2, 3).hashCode()
+        nin('a', [1, 2, 3]).hashCode() != nin('a', 1, 2).hashCode()
+        all('a', [1, 2, 3]).hashCode() != nin('a', 1, 2, 3).hashCode()
+        all('a', []).hashCode() == all('a').hashCode()
+    }
+
+    def 'should test equals for SimpleEncodingFilter'() {
+        expect:
+        eq('x', 1).equals(eq('x', 1))
+        !eq('x', 1).equals(ne('x', 1))
+        !eq('x', 1).equals(eq('x', 2))
+        !eq('y', 1).equals(eq('x', 1))
+        !eq('x', 1).equals(parse('{x : 1}'))
+        expr(new BsonDocument('$gt', new BsonArray([new BsonString('$spent'), new BsonString('$budget')])))
+                .equals(expr(new BsonDocument('$gt', new BsonArray([new BsonString('$spent'), new BsonString('$budget')]))))
+    }
+
+    def 'should test hashCode for SimpleEncodingFilter'() {
+        expect:
+        eq('x', 1).hashCode() == eq('x', 1).hashCode()
+        eq('x', 1).hashCode() != ne('x', 1).hashCode()
+        eq('x', 1).hashCode() != eq('x', 2).hashCode()
+        eq('y', 1).hashCode() != eq('x', 1).hashCode()
+        eq('x', 1).hashCode() != parse('{x : 1}').hashCode()
+        expr(new BsonDocument('$gt', new BsonArray([new BsonString('$spent'), new BsonString('$budget')]))).hashCode() ==
+                expr(new BsonDocument('$gt', new BsonArray([new BsonString('$spent'), new BsonString('$budget')]))).hashCode()
+    }
+
+    def 'should test equals for NotFilter'() {
+        expect:
+        not(eq('x', 1)).equals(not(eq('x', 1)))
+    }
+
+    def 'should test hashCode for NotFilter'() {
+        expect:
+        not(eq('x', 1)).hashCode() == not(eq('x', 1)).hashCode()
+    }
+
+    def 'should test equals for GeometryOperatorFilter'() {
+        def polygon = new Polygon([new Position([40.0d, 18.0d]),
+                                   new Position([40.0d, 19.0d]),
+                                   new Position([41.0d, 19.0d]),
+                                   new Position([40.0d, 18.0d])])
+        expect:
+        geoWithin('loc', polygon).equals(geoWithin('loc', polygon))
+        !geoWithinBox('loc', 1d, 2d, 3d, 4d)
+                .equals(geoWithinBox('loc', 1d, 2d, 3d, 5d))
+
+        geoWithinPolygon('loc', [[0d, 0d], [3d, 6d], [6d, 0d]])
+                .equals(geoWithinPolygon('loc', [[0d, 0d], [3d, 6d], [6d, 0d]]))
+    }
+
+    def 'should test hashCode for GeometryOperatorFilter'() {
+        def polygon = new Polygon([new Position([40.0d, 18.0d]),
+                                   new Position([40.0d, 19.0d]),
+                                   new Position([41.0d, 19.0d]),
+                                   new Position([40.0d, 18.0d])])
+        expect:
+        geoWithin('loc', polygon).hashCode() == geoWithin('loc', polygon).hashCode()
+        geoWithinBox('loc', 1d, 2d, 3d, 4d).hashCode() !=
+                geoWithinBox('loc', 1d, 2d, 3d, 5d).hashCode()
+
+        geoWithinPolygon('loc', [[0d, 0d], [3d, 6d], [6d, 0d]]).hashCode() ==
+                geoWithinPolygon('loc', [[0d, 0d], [3d, 6d], [6d, 0d]]).hashCode()
+    }
+
+    def 'should test equals for TextFilter'() {
+        expect:
+        text('mongoDB for GIANT ideas').equals(text('mongoDB for GIANT ideas'))
+        text('mongoDB for GIANT ideas', 'english')
+                .equals(text('mongoDB for GIANT ideas', new TextSearchOptions().language('english')))
+    }
+
+    def 'should test hashCode for TextFilter'() {
+        expect:
+        text('mongoDB for GIANT ideas').hashCode() == text('mongoDB for GIANT ideas').hashCode()
+        text('mongoDB for GIANT ideas', 'english').hashCode() ==
+                text('mongoDB for GIANT ideas', new TextSearchOptions().language('english')).hashCode()
     }
 }

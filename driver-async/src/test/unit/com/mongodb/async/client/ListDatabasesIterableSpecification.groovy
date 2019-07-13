@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import com.mongodb.Block
 import com.mongodb.Function
 import com.mongodb.async.AsyncBatchCursor
 import com.mongodb.async.FutureResultCallback
+import com.mongodb.async.SingleResultCallback
 import com.mongodb.operation.ListDatabasesOperation
+import org.bson.BsonDocument
 import org.bson.Document
 import org.bson.codecs.BsonValueCodecProvider
 import org.bson.codecs.DocumentCodec
@@ -47,7 +49,8 @@ class ListDatabasesIterableSpecification extends Specification {
             }
         }
         def executor = new TestOperationExecutor([cursor, cursor]);
-        def listDatabasesIterable = new ListDatabasesIterableImpl<Document>(Document, codecRegistry, readPreference, executor)
+        def listDatabasesIterable = new ListDatabasesIterableImpl<Document>(null, Document, codecRegistry, readPreference,
+                executor, true)
                 .maxTime(1000, MILLISECONDS)
                 .batchSize(1) // batchSize should be silently ignored
 
@@ -58,16 +61,18 @@ class ListDatabasesIterableSpecification extends Specification {
         def readPreference = executor.getReadPreference()
 
         then:
-        expect operation, isTheSameAs(new ListDatabasesOperation<Document>(new DocumentCodec()).maxTime(1000, MILLISECONDS))
+        expect operation, isTheSameAs(new ListDatabasesOperation<Document>(new DocumentCodec()).maxTime(1000, MILLISECONDS)
+                .retryReads(true))
         readPreference == secondary()
 
         when: 'overriding initial options'
-        listDatabasesIterable.maxTime(999, MILLISECONDS).into([]) { result, t -> }
+        listDatabasesIterable.maxTime(999, MILLISECONDS).filter(Document.parse('{a: 1}')).nameOnly(true).into([]) { result, t -> }
 
         operation = executor.getReadOperation() as ListDatabasesOperation<Document>
 
         then: 'should use the overrides'
-        expect operation, isTheSameAs(new ListDatabasesOperation<Document>(new DocumentCodec()).maxTime(999, MILLISECONDS))
+        expect operation, isTheSameAs(new ListDatabasesOperation<Document>(new DocumentCodec()).maxTime(999, MILLISECONDS)
+                .filter(BsonDocument.parse('{a: 1}')).nameOnly(true).retryReads(true))
     }
 
     def 'should follow the MongoIterable interface as expected'() {
@@ -89,7 +94,7 @@ class ListDatabasesIterableSpecification extends Specification {
             }
         }
         def executor = new TestOperationExecutor([cursor(), cursor(), cursor(), cursor(), cursor()]);
-        def mongoIterable = new ListDatabasesIterableImpl<Document>(Document, codecRegistry, readPreference, executor)
+        def mongoIterable = new ListDatabasesIterableImpl<Document>(null, Document, codecRegistry, readPreference, executor, true)
 
         when:
         def results = new FutureResultCallback()
@@ -149,4 +154,64 @@ class ListDatabasesIterableSpecification extends Specification {
         batchCursor.isClosed()
     }
 
+    def 'should check variables using notNull'() {
+        given:
+        def mongoIterable = new ListDatabasesIterableImpl<Document>(null, Document, codecRegistry, readPreference,
+                Stub(OperationExecutor), true)
+        def callback = Stub(SingleResultCallback)
+        def block = Stub(Block)
+        def target = Stub(List)
+
+        when:
+        mongoIterable.first(null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.into(null, callback)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.into(target, null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.forEach(null, callback)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.forEach(block, null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.map()
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'should get and set batchSize as expected'() {
+        when:
+        def batchSize = 5
+        def mongoIterable = new ListDatabasesIterableImpl<Document>(null, Document, codecRegistry, readPreference,
+                Stub(OperationExecutor), true)
+
+        then:
+        mongoIterable.getBatchSize() == null
+
+        when:
+        mongoIterable.batchSize(batchSize)
+
+        then:
+        mongoIterable.getBatchSize() == batchSize
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import java.util.List;
  * @param <T> the type of document to decode query results to
  * @since 3.0
  */
+@Deprecated
 public class QueryResult<T> {
     private final MongoNamespace namespace;
     private final List<T> results;
@@ -47,18 +48,6 @@ public class QueryResult<T> {
         this.results = results;
         this.cursorId = cursorId;
         this.serverAddress = serverAddress;
-    }
-
-    /**
-     * Construct an instance.
-     *
-     * @param namespace    the namespace
-     * @param replyMessage the reply message
-     * @param address      the server address
-     */
-    QueryResult(final MongoNamespace namespace, final ReplyMessage<T> replyMessage, final ServerAddress address) {
-        this(namespace, replyMessage.getDocuments(), replyMessage.getReplyHeader().getCursorId(), address
-            );
     }
 
     /**

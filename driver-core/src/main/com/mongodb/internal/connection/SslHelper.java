@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,20 +17,63 @@
 package com.mongodb.internal.connection;
 
 import javax.net.ssl.SSLParameters;
+import java.lang.reflect.InvocationTargetException;
 
 /**
  * <p>This class should not be considered a part of the public API.</p>
  */
 public final class SslHelper {
+
+    // this will end up as null if running on a release prior to Java 8, in which case SNI will be silently disabled
+    private static final SniSslHelper SNI_SSL_HELPER;
+
+    static {
+        SniSslHelper sniSslHelper;
+        try {
+            sniSslHelper = (SniSslHelper) Class.forName("com.mongodb.internal.connection.Java8SniSslHelper")
+                                                  .getDeclaredConstructor().newInstance();
+        } catch (ClassNotFoundException e) {
+            // this is unexpected as it means the Java8SniSslHelper class itself is not found
+            throw new ExceptionInInitializerError(e);
+        } catch (InstantiationException e) {
+            // this is unexpected as it means Java8SniSslHelper can't be instantiated
+            throw new ExceptionInInitializerError(e);
+        } catch (IllegalAccessException e) {
+            // this is unexpected as it means Java8SniSslHelper's constructor isn't accessible
+            throw new ExceptionInInitializerError(e);
+        } catch (NoSuchMethodException e) {
+            // this is unexpected as it means Java8SniSslHelper has no no-args constructor
+            throw new ExceptionInInitializerError(e);
+        } catch (InvocationTargetException e) {
+            // this is unexpected as it means Java8SniSslHelper's constructor threw an exception
+            throw new ExceptionInInitializerError(e.getTargetException());
+        } catch (LinkageError t) {
+            // this is expected if running on a release prior to Java 8.  We want to just fail silently here
+            sniSslHelper = null;
+        }
+
+        SNI_SSL_HELPER = sniSslHelper;
+    }
+
     /**
      * Enable HTTP endpoint verification on the given SSL parameters.
      *
      * @param sslParameters The original SSL parameters
-     * @return the new SSL parameers with HTTPS endpoint verification enabled
      */
-    public static SSLParameters enableHostNameVerification(final SSLParameters sslParameters) {
+    public static void enableHostNameVerification(final SSLParameters sslParameters) {
         sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
-        return sslParameters;
+    }
+
+    /**
+     * Enable SNI if running on Java 8 or later.  Otherwise fail silently to enable SNI.
+     *
+     * @param host          the server host
+     * @param sslParameters the SSL parameters
+     */
+    public static void enableSni(final String host, final SSLParameters sslParameters) {
+        if (SNI_SSL_HELPER != null) {
+            SNI_SSL_HELPER.enableSni(host, sslParameters);
+        }
     }
 
     private SslHelper() {

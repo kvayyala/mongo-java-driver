@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,18 @@ final class DocumentHelper {
     static void putIfTrue(final BsonDocument command, final String key, final boolean condition) {
         if (condition) {
             command.put(key, BsonBoolean.TRUE);
+        }
+    }
+
+    static void putIfFalse(final BsonDocument command, final String key, final boolean condition) {
+        if (!condition) {
+            command.put(key, BsonBoolean.FALSE);
+        }
+    }
+
+    static void putIfNotNullOrEmpty(final BsonDocument command, final String key, final BsonDocument documentValue) {
+        if (documentValue != null && !documentValue.isEmpty()) {
+            command.put(key, documentValue);
         }
     }
 

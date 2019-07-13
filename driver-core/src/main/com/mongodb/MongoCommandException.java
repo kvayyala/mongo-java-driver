@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
 
 package com.mongodb;
 
+import org.bson.BsonArray;
 import org.bson.BsonDocument;
 import org.bson.BsonInt32;
 import org.bson.BsonString;
+import org.bson.BsonValue;
 import org.bson.codecs.BsonDocumentCodec;
 import org.bson.codecs.EncoderContext;
 import org.bson.json.JsonWriter;
@@ -45,9 +47,12 @@ public class MongoCommandException extends MongoServerException {
      */
     public MongoCommandException(final BsonDocument response, final ServerAddress address) {
         super(extractErrorCode(response),
-              format("Command failed with error %s: '%s' on server %s. The full response is %s", extractErrorCode(response),
+              format("Command failed with error %s: '%s' on server %s. The full response is %s", extractErrorCodeAndName(response),
                      extractErrorMessage(response), address, getResponseAsJson(response)), address);
         this.response = response;
+        for (BsonValue curErrorLabel : response.getArray("errorLabels", new BsonArray())) {
+            addLabel(curErrorLabel.asString().getValue());
+        }
     }
 
     /**
@@ -57,6 +62,17 @@ public class MongoCommandException extends MongoServerException {
      */
     public int getErrorCode() {
         return getCode();
+    }
+
+    /**
+     * Gets the name associated with the error code.
+     *
+     * @return the error code name, which may be the empty string
+     * @since 3.8
+     * @mongodb.server.release 3.4
+     */
+    public String getErrorCodeName() {
+        return extractErrorCodeName(response);
     }
 
     /**
@@ -84,11 +100,30 @@ public class MongoCommandException extends MongoServerException {
         return writer.toString();
     }
 
+    private static String extractErrorCodeAndName(final BsonDocument response) {
+        int errorCode = extractErrorCode(response);
+        String errorCodeName = extractErrorCodeName(response);
+        if (errorCodeName.isEmpty()) {
+            return Integer.toString(errorCode);
+        } else {
+            return String.format("%d (%s)", errorCode, errorCodeName);
+        }
+    }
+
     private static int extractErrorCode(final BsonDocument response) {
         return response.getNumber("code", new BsonInt32(-1)).intValue();
     }
 
+    private static String extractErrorCodeName(final BsonDocument response) {
+        return response.getString("codeName", new BsonString("")).getValue();
+    }
+
     private static String extractErrorMessage(final BsonDocument response) {
-        return response.getString("errmsg", new BsonString("")).getValue();
+        String errorMessage = response.getString("errmsg", new BsonString("")).getValue();
+        // Satisfy nullability checker
+        if (errorMessage == null) {
+            throw new MongoInternalException("This value should not be null");
+        }
+        return errorMessage;
     }
 }

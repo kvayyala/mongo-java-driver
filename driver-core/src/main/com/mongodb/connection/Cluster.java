@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@ package com.mongodb.connection;
 
 
 import com.mongodb.async.SingleResultCallback;
+import com.mongodb.lang.Nullable;
 import com.mongodb.selector.ServerSelector;
+import org.bson.BsonTimestamp;
 
 import java.io.Closeable;
 
@@ -27,7 +29,16 @@ import java.io.Closeable;
  *
  * @since 3.0
  */
-public interface Cluster extends Closeable{
+@Deprecated
+public interface Cluster extends Closeable {
+
+    /**
+     * Gets the cluster settings with which this cluster was created.
+     *
+     * @return the cluster settings
+     * @since 3.4
+     */
+    ClusterSettings getSettings();
 
     /**
      * Get the description of this cluster.  This method will not return normally until the cluster type is known.
@@ -36,6 +47,22 @@ public interface Cluster extends Closeable{
      * @throws com.mongodb.MongoTimeoutException if the timeout has been reached before the cluster type is known
      */
     ClusterDescription getDescription();
+
+    /**
+     * Get the current description of this cluster.
+     *
+     * @return the current ClusterDescription representing the current state of the cluster.
+     */
+    ClusterDescription getCurrentDescription();
+
+    /**
+     * Get the last seen cluster time
+     *
+     * @since 3.8
+     * @return the last seen cluster time or null if not set
+     */
+    @Nullable
+    BsonTimestamp getClusterTime();
 
     /**
      * Get a MongoDB server that matches the criteria defined by the serverSelector

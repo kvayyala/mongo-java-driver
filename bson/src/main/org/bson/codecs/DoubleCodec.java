@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.bson.codecs;
 import org.bson.BsonReader;
 import org.bson.BsonWriter;
 
+import static org.bson.codecs.NumberCodecHelper.decodeDouble;
+
 /**
  * Encodes and decodes {@code Double} objects.
  *
@@ -32,7 +34,7 @@ public class DoubleCodec implements Codec<Double> {
 
     @Override
     public Double decode(final BsonReader reader, final DecoderContext decoderContext) {
-        return reader.readDouble();
+        return decodeDouble(reader);
     }
 
     @Override

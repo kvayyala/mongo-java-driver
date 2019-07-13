@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,7 @@
 package org.bson;
 
 import org.bson.codecs.BsonTypeClassMap;
+import org.bson.codecs.BsonValueCodecProvider;
 import org.bson.codecs.CollectibleCodec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.DocumentCodec;
@@ -27,6 +28,10 @@ import org.bson.codecs.configuration.CodecConfigurationException;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.json.JsonReader;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static java.util.Arrays.asList;
 import static org.bson.codecs.configuration.CodecRegistries.fromCodecs;
@@ -48,7 +53,7 @@ public class DocumentTest {
 
     private final Document customDocument = new Document("database", new Name("MongoDB"));
     private final CodecRegistry customRegistry = fromRegistries(fromCodecs(new NameCodec()),
-            fromProviders(new DocumentCodecProvider(), new ValueCodecProvider()));
+            fromProviders(new DocumentCodecProvider(), new ValueCodecProvider(), new BsonValueCodecProvider()));
     private final DocumentCodec customDocumentCodec = new DocumentCodec(customRegistry, new BsonTypeClassMap());
 
     @Test
@@ -74,6 +79,35 @@ public class DocumentTest {
                      document);
     }
 
+    // Test in Java to make sure none of the casts result in compiler warnings or class cast exceptions
+    @Test
+    public void shouldGetWithDefaultValue() {
+        // given
+        Document d = new Document("x", 1)
+                .append("y", Collections.singletonList("one"))
+                .append("z", "foo");
+
+        // when the key is found
+        int x = d.get("x", 2);
+        List<String> y = d.get("y", Arrays.asList("three", "four"));
+        String z = d.get("z", "bar");
+
+        // then it returns the value
+        assertEquals(1, x);
+        assertEquals(Arrays.asList("one"), y);
+        assertEquals("foo", z);
+
+        // when the key is not found
+        int x2 = d.get("x2", 2);
+        List<String> y2 = d.get("y2", Arrays.asList("three", "four"));
+        String z2 = d.get("z2", "bar");
+
+        // then it returns the default value
+        assertEquals(2, x2);
+        assertEquals(Arrays.asList("three", "four"), y2);
+        assertEquals("bar", z2);
+    }
+
     @Test
     public void toJsonShouldTakeACustomDocumentCodec() {
 
@@ -84,7 +118,7 @@ public class DocumentTest {
             // noop
         }
 
-        assertEquals("{ \"database\" : { \"name\" : \"MongoDB\" } }", customDocument.toJson(customDocumentCodec));
+        assertEquals("{\"database\": {\"name\": \"MongoDB\"}}", customDocument.toJson(customDocumentCodec));
     }
 
     public class Name {

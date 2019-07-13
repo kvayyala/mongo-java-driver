@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,9 +25,12 @@ import static java.util.Collections.newSetFromMap;
 
 /**
  * A multicaster for connection pool events.
+ *
+ * @deprecated register multiple command listeners instead
  */
 @Beta
-public class ConnectionPoolEventMulticaster implements ConnectionPoolListener {
+@Deprecated
+public final class ConnectionPoolEventMulticaster implements ConnectionPoolListener {
     private final Set<ConnectionPoolListener> connectionPoolListeners
         = newSetFromMap(new ConcurrentHashMap<ConnectionPoolListener, Boolean>());
 
@@ -57,49 +60,49 @@ public class ConnectionPoolEventMulticaster implements ConnectionPoolListener {
     }
 
     @Override
-    public void connectionPoolClosed(final ConnectionPoolEvent event) {
+    public void connectionPoolClosed(final ConnectionPoolClosedEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.connectionPoolClosed(event);
         }
     }
 
     @Override
-    public void connectionCheckedOut(final ConnectionEvent event) {
+    public void connectionCheckedOut(final ConnectionCheckedOutEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.connectionCheckedOut(event);
         }
     }
 
     @Override
-    public void connectionCheckedIn(final ConnectionEvent event) {
+    public void connectionCheckedIn(final ConnectionCheckedInEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.connectionCheckedIn(event);
         }
     }
 
     @Override
-    public void waitQueueEntered(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueEntered(final ConnectionPoolWaitQueueEnteredEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.waitQueueEntered(event);
         }
     }
 
     @Override
-    public void waitQueueExited(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueExited(final ConnectionPoolWaitQueueExitedEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.waitQueueExited(event);
         }
     }
 
     @Override
-    public void connectionAdded(final ConnectionEvent event) {
+    public void connectionAdded(final ConnectionAddedEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.connectionAdded(event);
         }
     }
 
     @Override
-    public void connectionRemoved(final ConnectionEvent event) {
+    public void connectionRemoved(final ConnectionRemovedEvent event) {
         for (final ConnectionPoolListener cur : connectionPoolListeners) {
             cur.connectionRemoved(event);
         }

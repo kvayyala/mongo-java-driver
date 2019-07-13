@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.client.model.geojson.codecs;
 
+import com.mongodb.client.model.geojson.Geometry;
 import com.mongodb.client.model.geojson.GeometryCollection;
 import com.mongodb.client.model.geojson.LineString;
 import com.mongodb.client.model.geojson.MultiLineString;
@@ -53,6 +54,8 @@ public class GeoJsonCodecProvider implements CodecProvider {
             return (Codec<T>) new GeometryCollectionCodec(registry);
         } else if (clazz.equals(NamedCoordinateReferenceSystem.class)) {
             return (Codec<T>) new NamedCoordinateReferenceSystemCodec();
+        } else if (clazz.equals(Geometry.class)) {
+            return (Codec<T>) new GeometryCodec(registry);
         }
 
         return null;

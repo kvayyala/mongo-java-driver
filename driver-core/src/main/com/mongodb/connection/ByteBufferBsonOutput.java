@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import org.bson.io.OutputBuffer;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,9 +31,12 @@ import static com.mongodb.assertions.Assertions.notNull;
  * This class should not be considered as part of the public API, and it may change or be removed at any time.
  *
  */
+@Deprecated
 public class ByteBufferBsonOutput extends OutputBuffer {
 
-    public static final int INITIAL_BUFFER_SIZE = 1024;
+    private static final int MAX_SHIFT = 31;
+    private static final int INITIAL_SHIFT = 10;
+    public static final int INITIAL_BUFFER_SIZE = 1 << INITIAL_SHIFT;
     public static final int MAX_BUFFER_SIZE = 1 << 24;
 
     private final BufferProvider bufferProvider;
@@ -86,7 +90,9 @@ public class ByteBufferBsonOutput extends OutputBuffer {
 
     private ByteBuf getByteBufferAtIndex(final int index) {
         if (bufferList.size() < index + 1) {
-            bufferList.add(bufferProvider.getBuffer(Math.min(INITIAL_BUFFER_SIZE << index, MAX_BUFFER_SIZE)));
+            bufferList.add(bufferProvider.getBuffer(index >= (MAX_SHIFT - INITIAL_SHIFT)
+                                                            ? MAX_BUFFER_SIZE
+                                                            : Math.min(INITIAL_BUFFER_SIZE << index, MAX_BUFFER_SIZE)));
         }
         return bufferList.get(index);
     }
@@ -124,7 +130,7 @@ public class ByteBufferBsonOutput extends OutputBuffer {
 
         List<ByteBuf> buffers = new ArrayList<ByteBuf>(bufferList.size());
         for (final ByteBuf cur : bufferList) {
-            buffers.add(cur.duplicate().flip());
+            buffers.add(cur.duplicate().order(ByteOrder.LITTLE_ENDIAN).flip());
         }
         return buffers;
     }
@@ -134,10 +140,17 @@ public class ByteBufferBsonOutput extends OutputBuffer {
     public int pipe(final OutputStream out) throws IOException {
         ensureOpen();
 
+        byte[] tmp = new byte[INITIAL_BUFFER_SIZE];
+
         int total = 0;
         for (final ByteBuf cur : getByteBuffers()) {
-            out.write(cur.array(), 0, cur.limit());
-            total += cur.limit();
+            ByteBuf dup = cur.duplicate();
+            while (dup.hasRemaining()) {
+                int numBytesToCopy = Math.min(dup.remaining(), tmp.length);
+                dup.get(tmp, 0, numBytesToCopy);
+                out.write(tmp, 0, numBytesToCopy);
+            }
+            total += dup.limit();
         }
         return total;
     }
@@ -194,7 +207,7 @@ public class ByteBufferBsonOutput extends OutputBuffer {
     }
 
     private static final class BufferPositionPair {
-        private int bufferIndex;
+        private final int bufferIndex;
         private int position;
 
         BufferPositionPair(final int bufferIndex, final int position) {

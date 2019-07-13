@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONObjectITIONS OF ANY KINObject, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -48,7 +48,7 @@ public final class Projections {
      * using the $project aggregation pipeline stage.
      *
      * @param fieldName     the field name
-     * @param  expression   the expression
+     * @param expression    the expression
      * @param <TExpression> the expression type
      * @return the projection
      * @see Aggregates#project(Bson)
@@ -129,12 +129,7 @@ public final class Projections {
      * @mongodb.driver.manual reference/operator/projection/elemMatch elemMatch
      */
     public static Bson elemMatch(final String fieldName, final Bson filter) {
-        return new Bson() {
-            @Override
-            public <TDocument> BsonDocument toBsonDocument(final Class<TDocument> documentClass, final CodecRegistry codecRegistry) {
-                return new BsonDocument(fieldName, new BsonDocument("$elemMatch", filter.toBsonDocument(documentClass, codecRegistry)));
-            }
-        };
+        return new ElemMatchFilterProjection(fieldName, filter);
     }
 
     /**
@@ -152,7 +147,7 @@ public final class Projections {
      * Creates a projection to the given field name of a slice of the array value of that field.
      *
      * @param fieldName the field name
-     * @param limit the number of elements to project.
+     * @param limit     the number of elements to project.
      * @return the projection
      * @mongodb.driver.manual reference/operator/projection/slice Slice
      */
@@ -164,8 +159,8 @@ public final class Projections {
      * Creates a projection to the given field name of a slice of the array value of that field.
      *
      * @param fieldName the field name
-     * @param skip the number of elements to skip before applying the limit
-     * @param limit the number of elements to project
+     * @param skip      the number of elements to skip before applying the limit
+     * @param limit     the number of elements to project
      * @return the projection
      * @mongodb.driver.manual reference/operator/projection/slice Slice
      */
@@ -190,24 +185,105 @@ public final class Projections {
      *
      * @param projections the list of projections to combine
      * @return the combined projection
-     * @mongodb.driver.manual
      */
-    public static Bson fields(final List<Bson> projections) {
-        notNull("sorts", projections);
-        return new Bson() {
-            @Override
-            public <TDocument> BsonDocument toBsonDocument(final Class<TDocument> documentClass, final CodecRegistry codecRegistry) {
-                BsonDocument combinedDocument = new BsonDocument();
-                for (Bson sort : projections) {
-                    BsonDocument sortDocument = sort.toBsonDocument(documentClass, codecRegistry);
-                    for (String key : sortDocument.keySet()) {
-                        combinedDocument.remove(key);
-                        combinedDocument.append(key, sortDocument.get(key));
-                    }
+    public static Bson fields(final List<? extends Bson> projections) {
+        notNull("projections", projections);
+        return new FieldsProjection(projections);
+    }
+
+    private static class FieldsProjection implements Bson {
+        private final List<? extends Bson> projections;
+
+        FieldsProjection(final List<? extends Bson> projections) {
+            this.projections = projections;
+        }
+
+        @Override
+        public <TDocument> BsonDocument toBsonDocument(final Class<TDocument> documentClass, final CodecRegistry codecRegistry) {
+            BsonDocument combinedDocument = new BsonDocument();
+            for (Bson sort : projections) {
+                BsonDocument sortDocument = sort.toBsonDocument(documentClass, codecRegistry);
+                for (String key : sortDocument.keySet()) {
+                    combinedDocument.remove(key);
+                    combinedDocument.append(key, sortDocument.get(key));
                 }
-                return combinedDocument;
             }
-        };
+            return combinedDocument;
+        }
+
+        @Override
+        public boolean equals(final Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            FieldsProjection that = (FieldsProjection) o;
+
+            return projections != null ? projections.equals(that.projections) : that.projections == null;
+        }
+
+        @Override
+        public int hashCode() {
+            return projections != null ? projections.hashCode() : 0;
+        }
+
+        @Override
+        public String toString() {
+            return "Projections{"
+                           + "projections=" + projections
+                           + '}';
+        }
+    }
+
+
+    private static class ElemMatchFilterProjection implements Bson {
+        private final String fieldName;
+        private final Bson filter;
+
+        ElemMatchFilterProjection(final String fieldName, final Bson filter) {
+            this.fieldName = fieldName;
+            this.filter = filter;
+        }
+
+        @Override
+        public <TDocument> BsonDocument toBsonDocument(final Class<TDocument> documentClass, final CodecRegistry codecRegistry) {
+            return new BsonDocument(fieldName, new BsonDocument("$elemMatch", filter.toBsonDocument(documentClass, codecRegistry)));
+        }
+
+        @Override
+        public boolean equals(final Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+
+            ElemMatchFilterProjection that = (ElemMatchFilterProjection) o;
+
+            if (fieldName != null ? !fieldName.equals(that.fieldName) : that.fieldName != null) {
+                return false;
+            }
+            return filter != null ? filter.equals(that.filter) : that.filter == null;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = fieldName != null ? fieldName.hashCode() : 0;
+            result = 31 * result + (filter != null ? filter.hashCode() : 0);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "ElemMatch Projection{"
+                           + "fieldName='" + fieldName + '\''
+                           + ", filter=" + filter
+                           + '}';
+        }
     }
 
     private static Bson combine(final List<String> fieldNames, final BsonValue value) {

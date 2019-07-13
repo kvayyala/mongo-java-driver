@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,18 +20,16 @@ import com.mongodb.OperationFunctionalSpecification
 import org.bson.BsonTimestamp
 import org.bson.Document
 import org.bson.conversions.Bson
-import spock.lang.IgnoreIf
 
-import static com.mongodb.ClusterFixture.serverVersionAtLeast
 import static com.mongodb.client.model.Updates.combine
 import static com.mongodb.client.model.Updates.currentDate
 import static com.mongodb.client.model.Updates.currentTimestamp
+import static com.mongodb.client.model.Updates.inc
 import static com.mongodb.client.model.Updates.max
 import static com.mongodb.client.model.Updates.min
 import static com.mongodb.client.model.Updates.mul
 import static com.mongodb.client.model.Updates.rename
 import static com.mongodb.client.model.Updates.set
-import static com.mongodb.client.model.Updates.inc
 import static com.mongodb.client.model.Updates.setOnInsert
 import static com.mongodb.client.model.Updates.unset
 
@@ -65,7 +65,6 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
         find() == [new Document('_id', 1).append('x', 5)]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def 'setOnInsert'() {
         when:
         updateOne(setOnInsert('y', 5))
@@ -78,6 +77,18 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
 
         then:
         find(new Document('_id', 2)) == [new Document('_id', 2).append('y', 5)]
+
+        when:
+        updateOne(new Document('_id', 3), setOnInsert(Document.parse('{a: 1, b: "two"}')), true)
+
+        then:
+        find(new Document('_id', 3)) == [Document.parse('{_id: 3, a: 1, b: "two"}')]
+
+        when:
+        updateOne(new Document('_id', 3), setOnInsert(null), true)
+
+        then:
+        thrown IllegalArgumentException
     }
 
     def 'unset'() {
@@ -116,7 +127,6 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
         find() == [new Document('_id', 1).append('x', 14.4)]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def 'mul'() {
         when:
         updateOne(mul('x', 5))
@@ -137,7 +147,6 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
         find() == [new Document('_id', 1).append('x', 87.5)]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def 'min'() {
         when:
         updateOne(min('x', -1))
@@ -146,7 +155,6 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
         find() == [new Document('_id', 1).append('x', -1)]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def 'max'() {
         when:
         updateOne(max('x', 5))
@@ -155,7 +163,6 @@ class UpdatesFunctionalSpecification extends OperationFunctionalSpecification {
         find() == [new Document('_id', 1).append('x', 5)]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def 'currentDate'() {
         when:
         updateOne(currentDate('y'))

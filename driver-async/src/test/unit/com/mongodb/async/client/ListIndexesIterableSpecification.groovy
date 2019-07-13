@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import com.mongodb.Function
 import com.mongodb.MongoNamespace
 import com.mongodb.async.AsyncBatchCursor
 import com.mongodb.async.FutureResultCallback
+import com.mongodb.async.SingleResultCallback
 import com.mongodb.operation.ListIndexesOperation
 import org.bson.Document
 import org.bson.codecs.BsonValueCodecProvider
@@ -48,8 +49,9 @@ class ListIndexesIterableSpecification extends Specification {
                 it[0].onResult(null, null)
             }
         }
-        def executor = new TestOperationExecutor([cursor, cursor]);
-        def listIndexesIterable = new ListIndexesIterableImpl<Document>(namespace, Document, codecRegistry, readPreference, executor)
+        def executor = new TestOperationExecutor([cursor, cursor])
+        def listIndexesIterable = new ListIndexesIterableImpl<Document>(null, namespace, Document, codecRegistry, readPreference,
+                executor, true)
                 .batchSize(100).maxTime(1000, MILLISECONDS)
 
         when: 'default input should be as expected'
@@ -60,7 +62,7 @@ class ListIndexesIterableSpecification extends Specification {
 
         then:
         expect operation, isTheSameAs(new ListIndexesOperation<Document>(namespace, new DocumentCodec())
-                .batchSize(100).maxTime(1000, MILLISECONDS))
+                .batchSize(100).maxTime(1000, MILLISECONDS).retryReads(true))
         readPreference == secondary()
 
         when: 'overriding initial options'
@@ -72,7 +74,7 @@ class ListIndexesIterableSpecification extends Specification {
 
         then: 'should use the overrides'
         expect operation, isTheSameAs(new ListIndexesOperation<Document>(namespace, new DocumentCodec())
-                .batchSize(99).maxTime(999, MILLISECONDS))
+                .batchSize(99).maxTime(999, MILLISECONDS).retryReads(true))
     }
 
     def 'should follow the MongoIterable interface as expected'() {
@@ -94,7 +96,8 @@ class ListIndexesIterableSpecification extends Specification {
             }
         }
         def executor = new TestOperationExecutor([cursor(), cursor(), cursor(), cursor(), cursor()]);
-        def mongoIterable = new ListIndexesIterableImpl<Document>(namespace, Document, codecRegistry, readPreference, executor)
+        def mongoIterable = new ListIndexesIterableImpl<Document>(null, namespace, Document, codecRegistry, readPreference,
+                executor, true)
 
         when:
         def results = new FutureResultCallback()
@@ -154,4 +157,64 @@ class ListIndexesIterableSpecification extends Specification {
         batchCursor.isClosed()
     }
 
+    def 'should check variables using notNull'() {
+        given:
+        def mongoIterable = new ListIndexesIterableImpl<Document>(null, namespace, Document, codecRegistry, readPreference,
+                Stub(OperationExecutor), true)
+        def callback = Stub(SingleResultCallback)
+        def block = Stub(Block)
+        def target = Stub(List)
+
+        when:
+        mongoIterable.first(null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.into(null, callback)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.into(target, null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.forEach(null, callback)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.forEach(block, null)
+
+        then:
+        thrown(IllegalArgumentException)
+
+        when:
+        mongoIterable.map()
+
+        then:
+        thrown(IllegalArgumentException)
+    }
+
+    def 'should get and set batchSize as expected'() {
+        when:
+        def batchSize = 5
+        def mongoIterable = new ListIndexesIterableImpl<Document>(null, namespace, Document, codecRegistry, readPreference,
+                Stub(OperationExecutor), true)
+
+        then:
+        mongoIterable.getBatchSize() == null
+
+        when:
+        mongoIterable.batchSize(batchSize)
+
+        then:
+        mongoIterable.getBatchSize() == batchSize
+    }
 }

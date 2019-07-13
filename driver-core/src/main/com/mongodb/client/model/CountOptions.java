@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.client.model;
 
+import com.mongodb.lang.Nullable;
 import org.bson.conversions.Bson;
 
 import java.util.concurrent.TimeUnit;
@@ -34,12 +35,14 @@ public class CountOptions {
     private int limit;
     private int skip;
     private long maxTimeMS;
+    private Collation collation;
 
     /**
      * Gets the hint to apply.
      *
      * @return the hint, which should describe an existing
      */
+    @Nullable
     public Bson getHint() {
         return hint;
     }
@@ -48,7 +51,10 @@ public class CountOptions {
      * Gets the hint string to apply.
      *
      * @return the hint string, which should be the name of an existing index
+     * @deprecated Prefer {@link #getHint()}
      */
+    @Deprecated
+    @Nullable
     public String getHintString() {
         return hintString;
     }
@@ -59,7 +65,7 @@ public class CountOptions {
      * @param hint a document describing the index which should be used for this operation.
      * @return this
      */
-    public CountOptions hint(final Bson hint) {
+    public CountOptions hint(@Nullable final Bson hint) {
         this.hint = hint;
         return this;
     }
@@ -69,8 +75,10 @@ public class CountOptions {
      *
      * @param hint the name of the index which should be used for the operation
      * @return this
+     * @deprecated Prefer {@link #hint(Bson)}
      */
-    public CountOptions hintString(final String hint) {
+    @Deprecated
+    public CountOptions hintString(@Nullable final String hint) {
         this.hintString = hint;
         return this;
     }
@@ -141,5 +149,43 @@ public class CountOptions {
         notNull("timeUnit", timeUnit);
         this.maxTimeMS = TimeUnit.MILLISECONDS.convert(maxTime, timeUnit);
         return this;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    @Nullable
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public CountOptions collation(@Nullable final Collation collation) {
+        this.collation = collation;
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return "CountOptions{"
+                + "hint=" + hint
+                + ", hintString='" + hintString + '\''
+                + ", limit=" + limit
+                + ", skip=" + skip
+                + ", maxTimeMS=" + maxTimeMS
+                + ", collation=" + collation
+                + '}';
     }
 }

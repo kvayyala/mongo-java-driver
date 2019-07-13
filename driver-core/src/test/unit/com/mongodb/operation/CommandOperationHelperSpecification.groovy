@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,39 @@
 package com.mongodb.operation
 
 import com.mongodb.MongoCommandException
+import com.mongodb.MongoWriteConcernException
+import com.mongodb.ReadConcern
+import com.mongodb.ReadPreference
 import com.mongodb.ServerAddress
+import com.mongodb.async.SingleResultCallback
+import com.mongodb.binding.AsyncConnectionSource
+import com.mongodb.binding.AsyncReadBinding
+import com.mongodb.binding.AsyncWriteBinding
+import com.mongodb.binding.ConnectionSource
+import com.mongodb.binding.ReadBinding
+import com.mongodb.binding.WriteBinding
+import com.mongodb.connection.AsyncConnection
+import com.mongodb.connection.Connection
+import com.mongodb.connection.ConnectionDescription
+import com.mongodb.connection.ServerDescription
+import com.mongodb.connection.ServerType
+import com.mongodb.internal.validator.NoOpFieldNameValidator
+import com.mongodb.session.SessionContext
 import org.bson.BsonBoolean
 import org.bson.BsonDocument
 import org.bson.BsonInt32
 import org.bson.BsonString
+import org.bson.codecs.BsonDocumentCodec
+import org.bson.codecs.Decoder
 import spock.lang.Specification
 
+import static com.mongodb.ReadPreference.primary
+import static com.mongodb.operation.CommandOperationHelper.executeRetryableCommand
+import static com.mongodb.operation.CommandOperationHelper.executeCommand
+import static com.mongodb.operation.CommandOperationHelper.executeCommandAsync
 import static com.mongodb.operation.CommandOperationHelper.isNamespaceError
 import static com.mongodb.operation.CommandOperationHelper.rethrowIfNotNamespaceError
+import static com.mongodb.operation.OperationUnitSpecification.getMaxWireVersionForServerVersion
 
 class CommandOperationHelperSpecification extends Specification {
 
@@ -89,4 +113,209 @@ class CommandOperationHelperSpecification extends Specification {
                                                                      .append('code', new BsonInt32(26)),
                                                              new ServerAddress()), 'some value') == 'some value'
     }
+
+    def 'should set read preference to primary to false when using WriteBinding'() {
+        given:
+        def dbName = 'db'
+        def command = new BsonDocument()
+        def decoder = Stub(Decoder)
+        def connection = Mock(Connection)
+        def function = Stub(CommandOperationHelper.CommandWriteTransformer)
+        def connectionSource = Stub(ConnectionSource) {
+            getConnection() >> connection
+        }
+        def writeBinding = Stub(WriteBinding) {
+            getWriteConnectionSource() >> connectionSource
+        }
+        def connectionDescription = Stub(ConnectionDescription)
+
+        when:
+        executeCommand(writeBinding, dbName, command, decoder, function)
+
+        then:
+        _ * connection.getDescription() >> connectionDescription
+        1 * connection.command(dbName, command, _, primary(), decoder, _)
+        1 * connection.release()
+    }
+
+    def 'should retry with retryable exception'() {
+        given:
+        def dbName = 'db'
+        def command = BsonDocument.parse('''{findAndModify: "coll", query: {a: 1}, new: false, update: {$inc: {a :1}}, txnNumber: 1}''')
+        def commandCreator = { serverDescription, connectionDescription -> command }
+        def decoder = new BsonDocumentCodec()
+        def results = [
+            BsonDocument.parse('{ok: 1.0, writeConcernError: {code: 91, errmsg: "Replication is being shut down"}}'),
+            BsonDocument.parse('{ok: 1.0, writeConcernError: {code: -1, errmsg: "UnknownError"}}')] as Queue
+        def connection = Mock(Connection) {
+            _ * release()
+            _ * getDescription() >> Stub(ConnectionDescription) {
+                getMaxWireVersion() >> getMaxWireVersionForServerVersion([4, 0, 0])
+                getServerType() >> ServerType.REPLICA_SET_PRIMARY
+            }
+        }
+        def connectionSource = Stub(ConnectionSource) {
+            _ * getConnection() >> connection
+            _ * getServerDescription() >> Stub(ServerDescription) {
+                getLogicalSessionTimeoutMinutes() >> 1
+            }
+        }
+        def writeBinding = Stub(WriteBinding) {
+            getWriteConnectionSource() >> connectionSource
+            getSessionContext() >> Stub(SessionContext) {
+                hasSession() >> true
+                hasActiveTransaction() >> false
+                getReadConcern() >> ReadConcern.DEFAULT
+            }
+        }
+
+        when:
+        executeRetryableCommand(writeBinding, dbName, primary(), new NoOpFieldNameValidator(), decoder, commandCreator,
+                FindAndModifyHelper.transformer())
+
+        then:
+        2 * connection.command(dbName, command, _, primary(), decoder, _) >> { results.poll() }
+
+        then:
+        def ex = thrown(MongoWriteConcernException)
+        ex.writeConcernError.code == -1
+    }
+
+    def 'should retry with retryable exception async'() {
+        given:
+        def dbName = 'db'
+        def command = BsonDocument.parse('''{findAndModify: "coll", query: {a: 1}, new: false, update: {$inc: {a :1}}, txnNumber: 1}''')
+        def serverDescription = Stub(ServerDescription)
+        def connectionDescription = Stub(ConnectionDescription) {
+            getMaxWireVersion() >> getMaxWireVersionForServerVersion([4, 0, 0])
+            getServerType() >> ServerType.REPLICA_SET_PRIMARY
+        }
+        def commandCreator = { serverDesc, connectionDesc -> command }
+        def callback = new SingleResultCallback() {
+            def result
+            def throwable
+            @Override
+            void onResult(final Object result, final Throwable t) {
+                this.result = result
+                this.throwable = t
+            }
+        }
+        def decoder = new BsonDocumentCodec()
+        def results = [
+                BsonDocument.parse('{ok: 1.0, writeConcernError: {code: 91, errmsg: "Replication is being shut down"}}'),
+                BsonDocument.parse('{ok: 1.0, writeConcernError: {code: -1, errmsg: "UnknownError"}}')] as Queue
+
+        def connection = Mock(AsyncConnection) {
+            _ * getDescription() >> connectionDescription
+        }
+
+        def connectionSource = Stub(AsyncConnectionSource) {
+            getConnection(_) >> { it[0].onResult(connection, null) }
+            _ * getServerDescription() >> serverDescription
+        }
+        def asyncWriteBinding = Stub(AsyncWriteBinding) {
+            getWriteConnectionSource(_) >> { it[0].onResult(connectionSource, null) }
+            getSessionContext() >> Stub(SessionContext) {
+                hasSession() >> true
+                hasActiveTransaction() >> false
+                getReadConcern() >> ReadConcern.DEFAULT
+            }
+        }
+
+        when:
+        executeRetryableCommand(asyncWriteBinding, dbName, primary(), new NoOpFieldNameValidator(), decoder,
+                commandCreator, FindAndModifyHelper.asyncTransformer(), callback)
+
+        then:
+        2 * connection.commandAsync(dbName, command, _, primary(), decoder, _, _) >> { it.last().onResult(results.poll(), null) }
+
+        then:
+        callback.throwable instanceof MongoWriteConcernException
+        callback.throwable.writeConcernError.code == -1
+    }
+
+    def 'should use the ReadBindings readPreference'() {
+        given:
+        def dbName = 'db'
+        def command = new BsonDocument()
+        def commandCreator = { serverDescription, connectionDescription -> command }
+        def decoder = Stub(Decoder)
+        def function = Stub(CommandOperationHelper.CommandReadTransformer)
+        def connection = Mock(Connection)
+        def connectionSource = Stub(ConnectionSource) {
+            getConnection() >> connection
+        }
+        def readBinding = Stub(ReadBinding) {
+            getReadConnectionSource() >> connectionSource
+            getReadPreference() >> readPreference
+        }
+        def connectionDescription = Stub(ConnectionDescription)
+
+        when:
+        executeCommand(readBinding, dbName, commandCreator, decoder, function, false)
+
+        then:
+        _ * connection.getDescription() >> connectionDescription
+        1 * connection.command(dbName, command, _, readPreference, decoder, _)
+        1 * connection.release()
+
+        where:
+        readPreference << [primary(), ReadPreference.secondary()]
+    }
+
+    def 'should set read preference to primary to false when using AsyncWriteBinding'() {
+        given:
+        def dbName = 'db'
+        def command = new BsonDocument()
+        def decoder = Stub(Decoder)
+        def callback = Stub(SingleResultCallback)
+        def function = Stub(CommandOperationHelper.CommandWriteTransformerAsync)
+        def connection = Mock(AsyncConnection)
+        def connectionSource = Stub(AsyncConnectionSource) {
+            getConnection(_) >> { it[0].onResult(connection, null) }
+        }
+        def asyncWriteBinding = Stub(AsyncWriteBinding) {
+            getWriteConnectionSource(_) >> { it[0].onResult(connectionSource, null) }
+        }
+        def connectionDescription = Stub(ConnectionDescription)
+
+        when:
+        executeCommandAsync(asyncWriteBinding, dbName, command, decoder, function, callback)
+
+        then:
+        _ * connection.getDescription() >> connectionDescription
+        1 * connection.commandAsync(dbName, command, _, primary(), decoder, _, _) >> { it[6].onResult(1, null) }
+        1 * connection.release()
+    }
+
+    def 'should use the AsyncReadBindings readPreference'() {
+        given:
+        def dbName = 'db'
+        def command = new BsonDocument()
+        def commandCreator = { serverDescription, connectionDescription -> command }
+        def decoder = Stub(Decoder)
+        def callback = Stub(SingleResultCallback)
+        def function = Stub(CommandOperationHelper.CommandReadTransformerAsync)
+        def connection = Mock(AsyncConnection)
+        def connectionSource = Stub(AsyncConnectionSource) {
+            getConnection(_) >> { it[0].onResult(connection, null) }
+        }
+        def asyncReadBinding = Stub(AsyncReadBinding) {
+            getReadConnectionSource(_)  >> { it[0].onResult(connectionSource, null) }
+            getReadPreference() >> readPreference
+        }
+        def connectionDescription = Stub(ConnectionDescription)
+
+        when:
+        executeCommandAsync(asyncReadBinding, dbName, commandCreator, decoder, function, false, callback)
+
+        then:
+        _ * connection.getDescription() >> connectionDescription
+        1 * connection.commandAsync(dbName, command, _, readPreference, decoder, _, _) >> { it[6].onResult(1, null) }
+        1 * connection.release()
+
+        where:
+        readPreference << [primary(), ReadPreference.secondary()]
+    }
+
 }

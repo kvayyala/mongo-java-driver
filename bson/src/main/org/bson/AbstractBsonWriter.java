@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,17 @@
 
 package org.bson;
 
+import org.bson.types.Decimal128;
 import org.bson.types.ObjectId;
 
 import java.io.Closeable;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 
 import static java.lang.String.format;
+import static org.bson.assertions.Assertions.notNull;
 
 /**
  * Represents a BSON writer for some external format (see subclasses).
@@ -186,6 +190,14 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
     protected abstract void doWriteInt64(long value);
 
     /**
+     * Handles the logic of writing a Decimal128 value
+     *
+     * @param value the {@code Decimal128} value to write
+     * @since 3.4
+     */
+    protected abstract void doWriteDecimal128(Decimal128 value);
+
+    /**
      * Handles the logic of writing a JavaScript function
      *
      * @param value the {@code String} value to write
@@ -341,12 +353,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeBinaryData(final String name, final BsonBinary binary) {
+        notNull("name", name);
+        notNull("value", binary);
         writeName(name);
         writeBinaryData(binary);
     }
 
     @Override
     public void writeBinaryData(final BsonBinary binary) {
+        notNull("value", binary);
         checkPreconditions("writeBinaryData", State.VALUE, State.INITIAL);
         doWriteBinaryData(binary);
         setState(getNextState());
@@ -380,12 +395,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeDBPointer(final String name, final BsonDbPointer value) {
+        notNull("name", name);
+        notNull("value", value);
         writeName(name);
         writeDBPointer(value);
     }
 
     @Override
     public void writeDBPointer(final BsonDbPointer value) {
+        notNull("value", value);
         checkPreconditions("writeDBPointer", State.VALUE, State.INITIAL);
         doWriteDBPointer(value);
         setState(getNextState());
@@ -431,13 +449,32 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
     }
 
     @Override
+    public void writeDecimal128(final Decimal128 value) {
+        notNull("value", value);
+        checkPreconditions("writeInt64", State.VALUE);
+        doWriteDecimal128(value);
+        setState(getNextState());
+    }
+
+    @Override
+    public void writeDecimal128(final String name, final Decimal128 value) {
+        notNull("name", name);
+        notNull("value", value);
+        writeName(name);
+        writeDecimal128(value);
+    }
+
+    @Override
     public void writeJavaScript(final String name, final String code) {
+        notNull("name", name);
+        notNull("value", code);
         writeName(name);
         writeJavaScript(code);
     }
 
     @Override
     public void writeJavaScript(final String code) {
+        notNull("value", code);
         checkPreconditions("writeJavaScript", State.VALUE);
         doWriteJavaScript(code);
         setState(getNextState());
@@ -445,12 +482,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeJavaScriptWithScope(final String name, final String code) {
+        notNull("name", name);
+        notNull("value", code);
         writeName(name);
         writeJavaScriptWithScope(code);
     }
 
     @Override
     public void writeJavaScriptWithScope(final String code) {
+        notNull("value", code);
         checkPreconditions("writeJavaScriptWithScope", State.VALUE);
         doWriteJavaScriptWithScope(code);
         setState(State.SCOPE_DOCUMENT);
@@ -484,17 +524,25 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeName(final String name) {
+        notNull("name", name);
         if (state != State.NAME) {
             throwInvalidState("WriteName", State.NAME);
-        }
-        if (name == null) {
-            throw new IllegalArgumentException("BSON field name can not be null");
         }
         if (!fieldNameValidatorStack.peek().validate(name)) {
             throw new IllegalArgumentException(format("Invalid BSON field name %s", name));
         }
+        doWriteName(name);
         context.name = name;
         state = State.VALUE;
+    }
+
+    /**
+     * Handles the logic of writing the element name.
+     *
+     * @param name the name of the element
+     * @since 3.5
+     */
+    protected void doWriteName(final String name) {
     }
 
     @Override
@@ -512,12 +560,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeObjectId(final String name, final ObjectId objectId) {
+        notNull("name", name);
+        notNull("value", objectId);
         writeName(name);
         writeObjectId(objectId);
     }
 
     @Override
     public void writeObjectId(final ObjectId objectId) {
+        notNull("value", objectId);
         checkPreconditions("writeObjectId", State.VALUE);
         doWriteObjectId(objectId);
         setState(getNextState());
@@ -525,12 +576,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeRegularExpression(final String name, final BsonRegularExpression regularExpression) {
+        notNull("name", name);
+        notNull("value", regularExpression);
         writeName(name);
         writeRegularExpression(regularExpression);
     }
 
     @Override
     public void writeRegularExpression(final BsonRegularExpression regularExpression) {
+        notNull("value", regularExpression);
         checkPreconditions("writeRegularExpression", State.VALUE);
         doWriteRegularExpression(regularExpression);
         setState(getNextState());
@@ -538,12 +592,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeString(final String name, final String value) {
+        notNull("name", name);
+        notNull("value", value);
         writeName(name);
         writeString(value);
     }
 
     @Override
     public void writeString(final String value) {
+        notNull("value", value);
         checkPreconditions("writeString", State.VALUE);
         doWriteString(value);
         setState(getNextState());
@@ -552,12 +609,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeSymbol(final String name, final String value) {
+        notNull("name", name);
+        notNull("value", value);
         writeName(name);
         writeSymbol(value);
     }
 
     @Override
     public void writeSymbol(final String value) {
+        notNull("value", value);
         checkPreconditions("writeSymbol", State.VALUE);
         doWriteSymbol(value);
         setState(getNextState());
@@ -565,12 +625,15 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void writeTimestamp(final String name, final BsonTimestamp value) {
+        notNull("name", name);
+        notNull("value", value);
         writeName(name);
         writeTimestamp(value);
     }
 
     @Override
     public void writeTimestamp(final BsonTimestamp value) {
+        notNull("value", value);
         checkPreconditions("writeTimestamp", State.VALUE);
         doWriteTimestamp(value);
         setState(getNextState());
@@ -689,39 +752,73 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
 
     @Override
     public void pipe(final BsonReader reader) {
-        pipeDocument(reader);
+        notNull("reader", reader);
+        pipeDocument(reader, null);
     }
 
-    private void pipeDocument(final BsonReader reader) {
+    /**
+     * Reads a single document from the given BsonReader and writes it to this, appending the given extra elements to the document.
+     *
+     * @param reader the source of the document
+     * @param extraElements the extra elements to append to the document
+     * @since 3.6
+     */
+    public void pipe(final BsonReader reader, final List<BsonElement> extraElements) {
+        notNull("reader", reader);
+        notNull("extraElements", extraElements);
+        pipeDocument(reader, extraElements);
+    }
+
+    /**
+     * Pipe a list of extra element to this writer
+     *
+     * @param extraElements the extra elements
+     */
+    protected void pipeExtraElements(final List<BsonElement> extraElements) {
+        notNull("extraElements", extraElements);
+        for (BsonElement cur : extraElements) {
+            writeName(cur.getName());
+            pipeValue(cur.getValue());
+        }
+    }
+
+    /**
+     * Return true if the current execution of the pipe method should be aborted.
+     *
+     * @return true if the current execution of the pipe method should be aborted.
+     *
+     * @since 3.7
+     */
+    protected boolean abortPipe() {
+        return false;
+    }
+
+    private void pipeDocument(final BsonReader reader, final List<BsonElement> extraElements) {
         reader.readStartDocument();
         writeStartDocument();
         while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
             writeName(reader.readName());
             pipeValue(reader);
+            if (abortPipe()) {
+                return;
+            }
         }
         reader.readEndDocument();
-        writeEndDocument();
-    }
-
-    private void pipeArray(final BsonReader reader) {
-        reader.readStartArray();
-        writeStartArray();
-        while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
-            pipeValue(reader);
+        if (extraElements != null) {
+            pipeExtraElements(extraElements);
         }
-        reader.readEndArray();
-        writeEndArray();
+        writeEndDocument();
     }
 
     private void pipeJavascriptWithScope(final BsonReader reader) {
         writeJavaScriptWithScope(reader.readJavaScriptWithScope());
-        pipeDocument(reader);
+        pipeDocument(reader, null);
     }
 
     private void pipeValue(final BsonReader reader) {
         switch (reader.getCurrentBsonType()) {
             case DOCUMENT:
-                pipeDocument(reader);
+                pipeDocument(reader, null);
                 break;
             case ARRAY:
                 pipeArray(reader);
@@ -773,6 +870,9 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
             case INT64:
                 writeInt64(reader.readInt64());
                 break;
+            case DECIMAL128:
+                writeDecimal128(reader.readDecimal128());
+                break;
             case MIN_KEY:
                 reader.readMinKey();
                 writeMinKey();
@@ -786,6 +886,111 @@ public abstract class AbstractBsonWriter implements BsonWriter, Closeable {
                 break;
             default:
                 throw new IllegalArgumentException("unhandled BSON type: " + reader.getCurrentBsonType());
+        }
+    }
+
+    private void pipeDocument(final BsonDocument value) {
+        writeStartDocument();
+        for (Map.Entry<String, BsonValue> cur : value.entrySet()) {
+            writeName(cur.getKey());
+            pipeValue(cur.getValue());
+        }
+        writeEndDocument();
+    }
+
+    private void pipeArray(final BsonReader reader) {
+        reader.readStartArray();
+        writeStartArray();
+        while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
+            pipeValue(reader);
+            if (abortPipe()) {
+                return;
+            }
+        }
+        reader.readEndArray();
+        writeEndArray();
+    }
+
+    private void pipeArray(final BsonArray array) {
+        writeStartArray();
+        for (BsonValue cur : array) {
+            pipeValue(cur);
+        }
+        writeEndArray();
+    }
+
+    private void pipeJavascriptWithScope(final BsonJavaScriptWithScope javaScriptWithScope) {
+        writeJavaScriptWithScope(javaScriptWithScope.getCode());
+        pipeDocument(javaScriptWithScope.getScope());
+    }
+
+    private void pipeValue(final BsonValue value) {
+        switch (value.getBsonType()) {
+            case DOCUMENT:
+                pipeDocument(value.asDocument());
+                break;
+            case ARRAY:
+                pipeArray(value.asArray());
+                break;
+            case DOUBLE:
+                writeDouble(value.asDouble().getValue());
+                break;
+            case STRING:
+                writeString(value.asString().getValue());
+                break;
+            case BINARY:
+                writeBinaryData(value.asBinary());
+                break;
+            case UNDEFINED:
+                writeUndefined();
+                break;
+            case OBJECT_ID:
+                writeObjectId(value.asObjectId().getValue());
+                break;
+            case BOOLEAN:
+                writeBoolean(value.asBoolean().getValue());
+                break;
+            case DATE_TIME:
+                writeDateTime(value.asDateTime().getValue());
+                break;
+            case NULL:
+                writeNull();
+                break;
+            case REGULAR_EXPRESSION:
+                writeRegularExpression(value.asRegularExpression());
+                break;
+            case JAVASCRIPT:
+                writeJavaScript(value.asJavaScript().getCode());
+                break;
+            case SYMBOL:
+                writeSymbol(value.asSymbol().getSymbol());
+                break;
+            case JAVASCRIPT_WITH_SCOPE:
+                pipeJavascriptWithScope(value.asJavaScriptWithScope());
+                break;
+            case INT32:
+                writeInt32(value.asInt32().getValue());
+                break;
+            case TIMESTAMP:
+                writeTimestamp(value.asTimestamp());
+                break;
+            case INT64:
+                writeInt64(value.asInt64().getValue());
+                break;
+            case DECIMAL128:
+                writeDecimal128(value.asDecimal128().getValue());
+                break;
+            case MIN_KEY:
+                writeMinKey();
+                break;
+            case DB_POINTER:
+                writeDBPointer(value.asDBPointer());
+                break;
+            case MAX_KEY:
+                writeMaxKey();
+                break;
+            default:
+                throw new IllegalArgumentException("unhandled BSON type: " + value.getBsonType());
         }
     }
 

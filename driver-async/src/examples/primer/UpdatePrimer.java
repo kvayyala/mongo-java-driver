@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,18 +22,12 @@ import org.junit.Test;
 import org.bson.Document;
 import com.mongodb.async.SingleResultCallback;
 import com.mongodb.client.result.UpdateResult;
-
-import static java.util.Arrays.asList;
 // @import: end
-import static com.mongodb.ClusterFixture.serverVersionAtLeast;
-import static org.junit.Assume.assumeTrue;
 
 public class UpdatePrimer extends PrimerTestCase {
 
     @Test
     public void updateTopLevelFields() {
-        assumeTrue(serverVersionAtLeast(asList(2, 6, 0)));
-
         // @begin: update-top-level-fields
         db.getCollection("restaurants").updateOne(new Document("name", "Juni"),
                 new Document("$set", new Document("cuisine", "American (New)"))
@@ -80,7 +74,6 @@ public class UpdatePrimer extends PrimerTestCase {
 
     @Test
     public void updateMultipleDocuments() {
-        assumeTrue(serverVersionAtLeast(asList(2, 6, 0)));
 
         // @begin: update-multiple-documents
         db.getCollection("restaurants").updateMany(new Document("address.zipcode", "10016").append("cuisine", "Other"),

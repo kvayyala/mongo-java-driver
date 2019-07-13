@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 
 package com.mongodb.event;
 
-import com.mongodb.annotations.Beta;
-
 /**
  * An adapter for connection pool listener implementations, for clients that want to listen for a subset of connection pool events. Extend
  * this class to listen for connection pool events and override the methods of interest.
+ *
+ * @since 3.5
  */
-@Beta
 public abstract class ConnectionPoolListenerAdapter implements ConnectionPoolListener {
 
     @Override
@@ -30,30 +29,30 @@ public abstract class ConnectionPoolListenerAdapter implements ConnectionPoolLis
     }
 
     @Override
-    public void connectionPoolClosed(final ConnectionPoolEvent event) {
+    public void connectionPoolClosed(final ConnectionPoolClosedEvent event) {
     }
 
     @Override
-    public void connectionCheckedOut(final ConnectionEvent event) {
+    public void connectionCheckedOut(final ConnectionCheckedOutEvent event) {
     }
 
     @Override
-    public void connectionCheckedIn(final ConnectionEvent event) {
+    public void connectionCheckedIn(final ConnectionCheckedInEvent event) {
     }
 
     @Override
-    public void waitQueueEntered(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueEntered(final ConnectionPoolWaitQueueEnteredEvent event) {
     }
 
     @Override
-    public void waitQueueExited(final ConnectionPoolWaitQueueEvent event) {
+    public void waitQueueExited(final ConnectionPoolWaitQueueExitedEvent event) {
     }
 
     @Override
-    public void connectionAdded(final ConnectionEvent event) {
+    public void connectionAdded(final ConnectionAddedEvent event) {
     }
 
     @Override
-    public void connectionRemoved(final ConnectionEvent event) {
+    public void connectionRemoved(final ConnectionRemovedEvent event) {
     }
 }

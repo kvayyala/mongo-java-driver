@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -122,7 +122,7 @@ public abstract class OutputBuffer extends OutputStream implements BsonOutput {
      * Get a list of byte buffers that are prepared to be read from; in other words, whose position is 0 and whose limit is the number of
      * bytes that should read. <p> Note that the byte buffers may be read-only. </p>
      *
-     * @return the non-null list of byte buffers.
+     * @return the non-null list of byte buffers, in LITTLE_ENDIAN order
      */
     public abstract List<ByteBuf> getByteBuffers();
 
@@ -171,7 +171,7 @@ public abstract class OutputBuffer extends OutputStream implements BsonOutput {
      * @param position the position, which must be greater than equal to 0 and at least 4 less than the stream size
      * @param value the value to write.  The 24 high-order bits of the value are ignored.
      */
-    protected abstract void write(final int position, final int value);
+    protected abstract void write(int position, int value);
 
     /**
      * Writes the given long value to the buffer.
@@ -187,7 +187,7 @@ public abstract class OutputBuffer extends OutputStream implements BsonOutput {
         int len = str.length();
         int total = 0;
 
-        for (int i = 0; i < len;/*i gets incremented*/) {
+        for (int i = 0; i < len;) {
             int c = Character.codePointAt(str, i);
 
             if (checkForNullCharacters && c == 0x0) {

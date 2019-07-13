@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import com.mongodb.async.client.MongoClients;
 import com.mongodb.async.client.MongoCollection;
 import com.mongodb.async.client.MongoDatabase;
 import com.mongodb.client.model.CreateCollectionOptions;
+import com.mongodb.client.model.Indexes;
+import com.mongodb.client.model.TextSearchOptions;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 
@@ -31,7 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import static com.mongodb.client.model.Filters.text;
 
 /**
- * The QuickTourAdmin code example see: https://mongodb.github.io/mongo-java-driver/3.0/getting-started
+ * The QuickTourAdmin code example
  */
 public class QuickTourAdmin {
     /**
@@ -99,7 +101,7 @@ public class QuickTourAdmin {
         collection.drop(callbackWhenFinished);
 
         // create an ascending index on the "i" field
-        collection.createIndex(new Document("i", 1), new SingleResultCallback<String>() {
+        collection.createIndex(Indexes.ascending("i"), new SingleResultCallback<String>() {
             @Override
             public void onResult(final String result, final Throwable t) {
                 System.out.println("Operation finished");
@@ -117,7 +119,7 @@ public class QuickTourAdmin {
 
 
         // create a text index on the "content" field
-        collection.createIndex(new Document("content", "text"), new SingleResultCallback<String>() {
+        collection.createIndex(Indexes.text("content"), new SingleResultCallback<String>() {
             @Override
             public void onResult(final String result, final Throwable t) {
                 System.out.println("Operation finished");
@@ -129,7 +131,7 @@ public class QuickTourAdmin {
         collection.insertOne(new Document("_id", 2).append("content", "irrelevant content"), callbackWhenFinished);
 
         // Find using the text index
-        collection.count(text("textual content -irrelevant"), new SingleResultCallback<Long>() {
+        collection.countDocuments(text("textual content -irrelevant"), new SingleResultCallback<Long>() {
             @Override
             public void onResult(final Long matchCount, final Throwable t) {
                 System.out.println("Text search matches: " + matchCount);
@@ -138,8 +140,8 @@ public class QuickTourAdmin {
 
 
         // Find using the $language operator
-        Bson textSearch = text("textual content -irrelevant", "english");
-        collection.count(textSearch, new SingleResultCallback<Long>() {
+        Bson textSearch = text("textual content -irrelevant", new TextSearchOptions().language("english"));
+        collection.countDocuments(textSearch, new SingleResultCallback<Long>() {
             @Override
             public void onResult(final Long matchCount, final Throwable t) {
                 System.out.println("Text search matches (english): " + matchCount);

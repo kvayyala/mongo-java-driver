@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,9 @@ import com.mongodb.Block
 import com.mongodb.MongoException
 import com.mongodb.async.SingleResultCallback
 import spock.lang.Specification
+
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 import static com.mongodb.async.client.Observables.observe
 
@@ -43,20 +46,38 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
         1 * block.apply(_)
     }
 
-
     def 'should call onComplete after all data has been consumed'() {
         given:
-        def block = getBlock()
+        SingleResultCallback<Integer> singleResultCallback = null
+        def executor = Executors.newFixedThreadPool(5)
         def observer = new TestObserver()
-        observe(block).subscribe(observer)
+        observe(new Block<SingleResultCallback<Integer>>() {
+            @Override
+            void apply(final SingleResultCallback<Integer> callback) {
+                singleResultCallback = callback
+            }
+        }).subscribe(observer)
 
         when:
-        observer.requestMore(10)
+        observer.requestMore(5)
+
+        then:
+        observer.assertNoTerminalEvent()
+        observer.assertNoErrors()
+        observer.assertReceivedOnNext([])
+
+        when:
+        100.times { executor.submit { observer.requestMore(1) } }
+        singleResultCallback?.onResult(1, null)
 
         then:
         observer.assertNoErrors()
-        observer.assertReceivedOnNext([1])
         observer.assertTerminalEvent()
+        observer.assertReceivedOnNext([1])
+
+        cleanup:
+        executor?.shutdown()
+        executor?.awaitTermination(10, TimeUnit.SECONDS)
     }
 
     def 'should throw an error if request is less than 1'() {
@@ -78,7 +99,7 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
         observe(new Block<SingleResultCallback<Integer>>() {
             @Override
             void apply(final SingleResultCallback<Integer> callback) {
-                callback.onResult(null, new MongoException('failed'));
+                callback.onResult(null, new MongoException('failed'))
             }
         }).subscribe(observer)
 
@@ -144,12 +165,31 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
     def 'should not call onComplete after unsubscribe is called'() {
         given:
         def block = getBlock()
-        def observer = new TestObserver()
+        def observer = new TestObserver(new Observer() {
+            private Subscription subscription
+
+            @Override
+            void onSubscribe(final Subscription subscription) {
+                this.subscription = subscription
+            }
+
+            @Override
+            void onNext(final Object result) {
+                subscription.unsubscribe()
+            }
+
+            @Override
+            void onError(final Throwable e) {
+            }
+
+            @Override
+            void onComplete() {
+            }
+        })
         observe(block).subscribe(observer)
 
         when:
         observer.requestMore(1)
-        observer.getSubscription().unsubscribe()
 
         then:
         observer.assertUnsubscribed()
@@ -161,12 +201,16 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
         given:
         def block = getBlock()
         def observer = new TestObserver(new Observer() {
+            private Subscription subscription
+
             @Override
             void onSubscribe(final Subscription subscription) {
+                this.subscription = subscription
             }
 
             @Override
             void onNext(final Object result) {
+                subscription.unsubscribe()
                 throw new MongoException('Failure')
             }
 
@@ -182,13 +226,12 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
 
         when:
         observer.requestMore(1)
-        observer.getSubscription().unsubscribe()
 
         then:
-        observer.assertUnsubscribed()
+        thrown(MongoException)
         observer.assertReceivedOnNext([1])
-        observer.assertErrored()
-        observer.assertTerminalEvent()
+        observer.assertUnsubscribed()
+        observer.assertNoTerminalEvent()
     }
 
 
@@ -227,6 +270,94 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
         observer.assertTerminalEvent()
     }
 
+    def 'should call onError if the passed block errors'() {
+        given:
+        def observer = new TestObserver()
+        observe(new Block<SingleResultCallback<Integer>>() {
+            @Override
+            void apply(final SingleResultCallback<Integer> callback) {
+                throw new MongoException('failed')
+            }
+        }).subscribe(observer)
+
+        when:
+        observer.requestMore(1)
+
+        then:
+        notThrown(MongoException)
+        observer.assertTerminalEvent()
+        observer.assertErrored()
+    }
+
+    def 'should throw the exception if calling onComplete raises one'() {
+        given:
+        def observer = new TestObserver(new Observer(){
+            @Override
+            void onSubscribe(final Subscription subscription) {
+            }
+
+            @Override
+            void onNext(final Object o) {
+            }
+
+            @Override
+            void onError(final Throwable e) {
+            }
+
+            @Override
+            void onComplete() {
+                throw new MongoException('exception calling onComplete')
+            }
+        })
+        observe(getBlock()).subscribe(observer)
+
+        when:
+        observer.requestMore(100)
+
+        then:
+        def ex = thrown(MongoException)
+        observer.assertNoErrors()
+        observer.assertTerminalEvent()
+        ex.message == 'exception calling onComplete'
+    }
+
+    def 'should throw the exception if calling onError raises one'() {
+        given:
+        def observer = new TestObserver(new Observer(){
+            @Override
+            void onSubscribe(final Subscription subscription) {
+            }
+
+            @Override
+            void onNext(final Object o) {
+            }
+
+            @Override
+            void onError(final Throwable e) {
+                throw new MongoException('exception calling onError')
+            }
+
+            @Override
+            void onComplete() {
+            }
+        })
+        observe(new Block<SingleResultCallback<Integer>>() {
+            @Override
+            void apply(final SingleResultCallback<Integer> callback) {
+                throw new MongoException('fail')
+            }
+        }).subscribe(observer)
+
+        when:
+        observer.requestMore(1)
+
+        then:
+        def ex = thrown(MongoException)
+        ex.message == 'exception calling onError'
+        observer.assertErrored()
+        observer.assertTerminalEvent()
+    }
+
     def getBlock() {
         getBlock(1)
     }
@@ -236,7 +367,7 @@ class SingleResultCallbackSubscriptionSpecification extends Specification {
 
             @Override
             void apply(final SingleResultCallback<Integer> callback) {
-                callback.onResult(results, null);
+                callback.onResult(results, null)
             }
         }
     }

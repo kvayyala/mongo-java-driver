@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,10 @@
 
 package com.mongodb.client.model;
 
+import com.mongodb.lang.Nullable;
 import org.bson.conversions.Bson;
+
+import static com.mongodb.assertions.Assertions.notNull;
 
 /**
  * Options for creating a collection
@@ -31,12 +34,17 @@ public class CreateCollectionOptions {
     private long sizeInBytes;
     private Boolean usePowerOf2Sizes;
     private Bson storageEngineOptions;
+    private IndexOptionDefaults indexOptionDefaults = new IndexOptionDefaults();
+    private ValidationOptions validationOptions = new ValidationOptions();
+    private Collation collation;
 
     /**
      * Gets if auto-index is enabled
      *
      * @return true if auto-index is enabled
+     * @deprecated this option was deprecated in MongoDB 3.2 and removed in MongodB 4.0
      */
+    @Deprecated
     public boolean isAutoIndex() {
         return autoIndex;
     }
@@ -46,7 +54,9 @@ public class CreateCollectionOptions {
      *
      * @param autoIndex true if auto-index is enabled
      * @return this
+     * @deprecated this option was deprecated in MongoDB 3.2 and removed in MongodB 4.0
      */
+    @Deprecated
     public CreateCollectionOptions autoIndex(final boolean autoIndex) {
         this.autoIndex = autoIndex;
         return this;
@@ -119,7 +129,10 @@ public class CreateCollectionOptions {
      * @return true if the usePowerOf2Sizes allocation strategy is turned on for this collection
      * @mongodb.driver.manual reference/command/collMod/#usePowerOf2Sizes usePowerOf2Sizes
      * @mongodb.server.release 2.6
+     * @deprecated As of MongoDB 3.0, power of 2 sizes is ignored by the MongoDB server
      */
+    @Deprecated
+    @Nullable
     public Boolean isUsePowerOf2Sizes() {
         return usePowerOf2Sizes;
     }
@@ -131,30 +144,123 @@ public class CreateCollectionOptions {
      * @return this
      * @mongodb.driver.manual reference/command/collMod/#usePowerOf2Sizes usePowerOf2Sizes
      * @mongodb.server.release 2.6
+     * @deprecated As of MongoDB 3.0, power of 2 sizes is ignored by the MongoDB server
      */
-    public CreateCollectionOptions usePowerOf2Sizes(final Boolean usePowerOf2Sizes) {
+    @Deprecated
+    public CreateCollectionOptions usePowerOf2Sizes(@Nullable final Boolean usePowerOf2Sizes) {
         this.usePowerOf2Sizes = usePowerOf2Sizes;
         return this;
     }
+
     /**
-     * Gets the storage engine options document for this index.
+     * Gets the storage engine options document for the collection.
      *
      * @return the storage engine options
      * @mongodb.server.release 3.0
      */
+    @Nullable
     public Bson getStorageEngineOptions() {
         return storageEngineOptions;
     }
 
     /**
-     * Sets the storage engine options document for this index.
+     * Sets the storage engine options document defaults for the collection
      *
-     * @param storageEngineOptions the storate engine options
+     * @param storageEngineOptions the storage engine options
      * @return this
      * @mongodb.server.release 3.0
      */
-    public CreateCollectionOptions storageEngineOptions(final Bson storageEngineOptions) {
+    public CreateCollectionOptions storageEngineOptions(@Nullable final Bson storageEngineOptions) {
         this.storageEngineOptions = storageEngineOptions;
         return this;
+    }
+
+    /**
+     * Gets the index option defaults for the collection.
+     *
+     * @return the index option defaults
+     * @since 3.2
+     * @mongodb.server.release 3.2
+     */
+    public IndexOptionDefaults getIndexOptionDefaults() {
+        return indexOptionDefaults;
+    }
+
+    /**
+     * Sets the index option defaults for the collection.
+     *
+     * @param indexOptionDefaults the index option defaults
+     * @return this
+     * @since 3.2
+     * @mongodb.server.release 3.2
+     */
+    public CreateCollectionOptions indexOptionDefaults(final IndexOptionDefaults indexOptionDefaults) {
+        this.indexOptionDefaults = notNull("indexOptionDefaults", indexOptionDefaults);
+        return this;
+    }
+
+    /**
+     * Gets the validation options for documents being inserted or updated in a collection
+     *
+     * @return the validation options
+     * @since 3.2
+     * @mongodb.server.release 3.2
+     */
+    public ValidationOptions getValidationOptions() {
+        return validationOptions;
+    }
+
+    /**
+     * Sets the validation options for documents being inserted or updated in a collection
+     *
+     * @param validationOptions the validation options
+     * @return this
+     * @since 3.2
+     * @mongodb.server.release 3.2
+     */
+    public CreateCollectionOptions validationOptions(final ValidationOptions validationOptions) {
+        this.validationOptions = notNull("validationOptions", validationOptions);
+        return this;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    @Nullable
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public CreateCollectionOptions collation(@Nullable final Collation collation) {
+        this.collation = collation;
+        return this;
+    }
+
+    @Override
+    public String toString() {
+        return "CreateCollectionOptions{"
+                + "autoIndex=" + autoIndex
+                + ", maxDocuments=" + maxDocuments
+                + ", capped=" + capped
+                + ", sizeInBytes=" + sizeInBytes
+                + ", usePowerOf2Sizes=" + usePowerOf2Sizes
+                + ", storageEngineOptions=" + storageEngineOptions
+                + ", indexOptionDefaults=" + indexOptionDefaults
+                + ", validationOptions=" + validationOptions
+                + ", collation=" + collation
+                + '}';
     }
 }

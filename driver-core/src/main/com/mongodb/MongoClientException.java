@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package com.mongodb;
 
 /**
- * A base class for exceptions indicating a failure condition within the driver.
+ * A base class for exceptions indicating a failure condition with the MongoClient.
  *
  * @since 2.12
  */

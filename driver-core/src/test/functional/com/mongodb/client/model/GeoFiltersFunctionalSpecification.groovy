@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,9 +19,7 @@ package com.mongodb.client.model
 import com.mongodb.OperationFunctionalSpecification
 import org.bson.Document
 import org.bson.conversions.Bson
-import spock.lang.IgnoreIf
 
-import static com.mongodb.ClusterFixture.serverVersionAtLeast
 import static com.mongodb.client.model.Filters.geoWithinBox
 import static com.mongodb.client.model.Filters.geoWithinCenter
 import static com.mongodb.client.model.Filters.geoWithinCenterSphere
@@ -51,25 +51,21 @@ class GeoFiltersFunctionalSpecification extends OperationFunctionalSpecification
         find(nearSphere('geo', 1.01d, 1.01d, 0.1d, 0.0d)) == [firstPoint, thirdPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$geoWithin $box'() {
         expect:
         find(geoWithinBox('geo', 0d, 0d, 4d, 4d)) == [firstPoint, thirdPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$geoWithin $polygon'() {
         expect:
         find(geoWithinPolygon('geo', [[0d, 0d], [0d, 4d], [4d, 4d], [4d, 0d]])) == [firstPoint, thirdPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$geoWithin $center'() {
         expect:
         find(geoWithinCenter('geo', 2d, 2d, 4d)) == [firstPoint, thirdPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 6, 0]) })
     def '$geoWithin $centerSphere'() {
         expect:
         find(geoWithinCenterSphere('geo', 2d, 2d, 4d)) == [firstPoint, secondPoint, thirdPoint]

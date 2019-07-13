@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.bson;
 
+import org.bson.types.Decimal128;
 import org.bson.types.ObjectId;
 
 import static org.bson.BsonContextType.DOCUMENT;
@@ -134,6 +135,11 @@ public class BsonDocumentWriter extends AbstractBsonWriter {
     }
 
     @Override
+    protected void doWriteDecimal128(final Decimal128 value) {
+        write(new BsonDecimal128(value));
+    }
+
+    @Override
     protected void doWriteJavaScript(final String value) {
         write(new BsonJavaScript(value));
     }
@@ -204,12 +210,12 @@ public class BsonDocumentWriter extends AbstractBsonWriter {
     private class Context extends AbstractBsonWriter.Context {
         private BsonValue container;
 
-        public Context(final BsonValue container, final BsonContextType contextType, final Context parent) {
+        Context(final BsonValue container, final BsonContextType contextType, final Context parent) {
             super(parent, contextType);
             this.container = container;
         }
 
-        public Context() {
+        Context() {
             super(null, BsonContextType.TOP_LEVEL);
         }
 

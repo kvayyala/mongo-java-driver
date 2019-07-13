@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,37 +16,36 @@
 
 package com.mongodb.async.client;
 
-import com.mongodb.Block;
-import com.mongodb.Function;
 import com.mongodb.MongoNamespace;
+import com.mongodb.ReadConcern;
 import com.mongodb.ReadPreference;
+import com.mongodb.WriteConcern;
 import com.mongodb.async.AsyncBatchCursor;
 import com.mongodb.async.SingleResultCallback;
+import com.mongodb.binding.AsyncReadBinding;
+import com.mongodb.binding.AsyncWriteBinding;
+import com.mongodb.client.model.Collation;
 import com.mongodb.client.model.FindOptions;
 import com.mongodb.client.model.MapReduceAction;
-import com.mongodb.operation.AsyncOperationExecutor;
+import com.mongodb.internal.operation.AsyncOperations;
+import com.mongodb.lang.Nullable;
+import com.mongodb.operation.AsyncReadOperation;
+import com.mongodb.operation.AsyncWriteOperation;
+import com.mongodb.operation.MapReduceAsyncBatchCursor;
 import com.mongodb.operation.MapReduceStatistics;
-import com.mongodb.operation.MapReduceToCollectionOperation;
-import com.mongodb.operation.MapReduceWithInlineResultsOperation;
 import org.bson.BsonDocument;
-import org.bson.BsonJavaScript;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.conversions.Bson;
 
-import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.ReadPreference.primary;
 import static com.mongodb.assertions.Assertions.notNull;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-class MapReduceIterableImpl<TDocument, TResult> implements MapReduceIterable<TResult> {
+class MapReduceIterableImpl<TDocument, TResult> extends MongoIterableImpl<TResult> implements MapReduceIterable<TResult> {
+    private final AsyncOperations<TDocument> operations;
     private final MongoNamespace namespace;
-    private final Class<TDocument> documentClass;
     private final Class<TResult> resultClass;
-    private final ReadPreference readPreference;
-    private final CodecRegistry codecRegistry;
-    private final AsyncOperationExecutor executor;
     private final String mapFunction;
     private final String reduceFunction;
 
@@ -64,17 +63,18 @@ class MapReduceIterableImpl<TDocument, TResult> implements MapReduceIterable<TRe
     private String databaseName;
     private boolean sharded;
     private boolean nonAtomic;
-    private int batchSize;
+    private Boolean bypassDocumentValidation;
+    private Collation collation;
 
-    MapReduceIterableImpl(final MongoNamespace namespace, final Class<TDocument> documentClass, final Class<TResult> resultClass,
-                          final CodecRegistry codecRegistry, final ReadPreference readPreference, final AsyncOperationExecutor executor,
+    MapReduceIterableImpl(@Nullable final ClientSession clientSession, final MongoNamespace namespace, final Class<TDocument> documentClass,
+                          final Class<TResult> resultClass, final CodecRegistry codecRegistry, final ReadPreference readPreference,
+                          final ReadConcern readConcern, final WriteConcern writeConcern, final OperationExecutor executor,
                           final String mapFunction, final String reduceFunction) {
+        super(clientSession, executor, readConcern, readPreference, false);
+        this.operations = new AsyncOperations<TDocument>(namespace, documentClass, readPreference, codecRegistry, readConcern, writeConcern,
+                false, false);
         this.namespace = notNull("namespace", namespace);
-        this.documentClass = notNull("documentClass", documentClass);
         this.resultClass = notNull("resultClass", resultClass);
-        this.codecRegistry = notNull("codecRegistry", codecRegistry);
-        this.readPreference = notNull("readPreference", readPreference);
-        this.executor = notNull("executor", executor);
         this.mapFunction = notNull("mapFunction", mapFunction);
         this.reduceFunction = notNull("reduceFunction", reduceFunction);
     }
@@ -87,25 +87,25 @@ class MapReduceIterableImpl<TDocument, TResult> implements MapReduceIterable<TRe
     }
 
     @Override
-    public MapReduceIterable<TResult> finalizeFunction(final String finalizeFunction) {
+    public MapReduceIterable<TResult> finalizeFunction(@Nullable final String finalizeFunction) {
         this.finalizeFunction = finalizeFunction;
         return this;
     }
 
     @Override
-    public MapReduceIterable<TResult> scope(final Bson scope) {
+    public MapReduceIterable<TResult> scope(@Nullable final Bson scope) {
         this.scope = scope;
         return this;
     }
 
     @Override
-    public MapReduceIterable<TResult> sort(final Bson sort) {
+    public MapReduceIterable<TResult> sort(@Nullable final Bson sort) {
         this.sort = sort;
         return this;
     }
 
     @Override
-    public MapReduceIterable<TResult> filter(final Bson filter) {
+    public MapReduceIterable<TResult> filter(@Nullable final Bson filter) {
         this.filter = filter;
         return this;
     }
@@ -142,7 +142,7 @@ class MapReduceIterableImpl<TDocument, TResult> implements MapReduceIterable<TRe
     }
 
     @Override
-    public MapReduceIterable<TResult> databaseName(final String databaseName) {
+    public MapReduceIterable<TResult> databaseName(@Nullable final String databaseName) {
         this.databaseName = databaseName;
         return this;
     }
@@ -161,100 +161,112 @@ class MapReduceIterableImpl<TDocument, TResult> implements MapReduceIterable<TRe
 
     @Override
     public MapReduceIterable<TResult> batchSize(final int batchSize) {
-        this.batchSize = batchSize;
+        super.batchSize(batchSize);
+        return this;
+    }
+
+    @Override
+    public MapReduceIterable<TResult> bypassDocumentValidation(@Nullable final Boolean bypassDocumentValidation) {
+        this.bypassDocumentValidation = bypassDocumentValidation;
+        return this;
+    }
+
+    @Override
+    public MapReduceIterable<TResult> collation(@Nullable final Collation collation) {
+        this.collation = collation;
         return this;
     }
 
     @Override
     public void toCollection(final SingleResultCallback<Void> callback) {
+        notNull("callback", callback);
         if (inline) {
-            throw new IllegalArgumentException("The options must specify a non-inline result");
+            throw new IllegalStateException("The options must specify a non-inline result");
         }
-        executor.execute(createMapReduceToCollectionOperation(),
-                new SingleResultCallback<MapReduceStatistics>() {
-                    @Override
-                    public void onResult(final MapReduceStatistics result, final Throwable t) {
-                        callback.onResult(null, t);
-                    }
-                });
+        getExecutor().execute(createMapReduceToCollectionOperation(), getReadConcern(), callback);
     }
 
     @Override
-    public void first(final SingleResultCallback<TResult> callback) {
-        execute().first(callback);
-    }
-
-    @Override
-    public void forEach(final Block<? super TResult> block, final SingleResultCallback<Void> callback) {
-        execute().forEach(block, callback);
-    }
-
-    @Override
-    public <A extends Collection<? super TResult>> void into(final A target, final SingleResultCallback<A> callback) {
-        execute().into(target, callback);
-    }
-
-    @Override
-    public <U> MongoIterable<U> map(final Function<TResult, U> mapper) {
-        return new MappingIterable<TResult, U>(this, mapper);
-    }
-
-    @Override
-    public void batchCursor(final SingleResultCallback<AsyncBatchCursor<TResult>> callback) {
-        execute().batchCursor(callback);
-    }
-
-    MongoIterable<TResult> execute() {
+    ReadPreference getReadPreference() {
         if (inline) {
-            MapReduceWithInlineResultsOperation<TResult> operation =
-                    new MapReduceWithInlineResultsOperation<TResult>(namespace,
-                            new BsonJavaScript(mapFunction),
-                            new BsonJavaScript(reduceFunction),
-                            codecRegistry.get(resultClass))
-                            .filter(toBsonDocument(filter))
-                            .limit(limit)
-                            .maxTime(maxTimeMS, MILLISECONDS)
-                            .jsMode(jsMode)
-                            .scope(toBsonDocument(scope))
-                            .sort(toBsonDocument(sort))
-                            .verbose(verbose);
-            if (finalizeFunction != null) {
-                operation.finalizeFunction(new BsonJavaScript(finalizeFunction));
-            }
-            return new OperationIterable<TResult>(operation, readPreference, executor);
+            return super.getReadPreference();
         } else {
-            MapReduceToCollectionOperation operation = createMapReduceToCollectionOperation();
-
-            String dbName = databaseName != null ? databaseName : namespace.getDatabaseName();
-            MongoIterable<TResult> delegated = new FindIterableImpl<TDocument, TResult>(new MongoNamespace(dbName, collectionName),
-                    documentClass, resultClass, codecRegistry, primary(), executor, new BsonDocument(),
-                    new FindOptions()).batchSize(batchSize);
-            return new AwaitingWriteOperationIterable<TResult, MapReduceStatistics>(operation, executor, delegated);
+            return primary();
         }
     }
 
-    private MapReduceToCollectionOperation createMapReduceToCollectionOperation() {
-        MapReduceToCollectionOperation operation = new MapReduceToCollectionOperation(namespace, new BsonJavaScript(mapFunction),
-                new BsonJavaScript(reduceFunction), collectionName)
-                .filter(toBsonDocument(filter))
-                .limit(limit)
-                .maxTime(maxTimeMS, MILLISECONDS)
-                .jsMode(jsMode)
-                .scope(toBsonDocument(scope))
-                .sort(toBsonDocument(sort))
-                .verbose(verbose)
-                .action(action.getValue())
-                .nonAtomic(nonAtomic)
-                .sharded(sharded)
-                .databaseName(databaseName);
-
-        if (finalizeFunction != null) {
-            operation.finalizeFunction(new BsonJavaScript(finalizeFunction));
+    @Override
+    AsyncReadOperation<AsyncBatchCursor<TResult>> asAsyncReadOperation() {
+        if (inline) {
+            return createMapReduceInlineOperation();
+        } else {
+            return new WriteOperationThenCursorReadOperation<TResult>(createMapReduceToCollectionOperation(), createFindOperation());
         }
-        return operation;
     }
 
-    private BsonDocument toBsonDocument(final Bson document) {
-        return document == null ? null : document.toBsonDocument(documentClass, codecRegistry);
+    private WrappedMapReduceReadOperation<TResult> createMapReduceInlineOperation() {
+        return new WrappedMapReduceReadOperation<TResult>(operations.mapReduce(mapFunction, reduceFunction, finalizeFunction,
+                resultClass, filter, limit, maxTimeMS, jsMode, scope, sort, verbose, collation));
+    }
+
+    private WrappedMapReduceWriteOperation createMapReduceToCollectionOperation() {
+        return new WrappedMapReduceWriteOperation(operations.mapReduceToCollection(databaseName, collectionName, mapFunction,
+                reduceFunction, finalizeFunction, filter, limit, maxTimeMS, jsMode, scope, sort, verbose, action, nonAtomic, sharded,
+                bypassDocumentValidation, collation));
+    }
+
+    private AsyncReadOperation<AsyncBatchCursor<TResult>> createFindOperation() {
+        String dbName = databaseName != null ? databaseName : namespace.getDatabaseName();
+        FindOptions findOptions = new FindOptions().collation(collation);
+        Integer batchSize = getBatchSize();
+        if (batchSize != null) {
+            findOptions.batchSize(batchSize);
+        }
+        return operations.find(new MongoNamespace(dbName, collectionName), new BsonDocument(), resultClass, findOptions);
+    }
+
+    // this could be inlined, but giving it a name so that it's unit-testable
+    static class WrappedMapReduceReadOperation<TResult> implements AsyncReadOperation<AsyncBatchCursor<TResult>> {
+        private final AsyncReadOperation<MapReduceAsyncBatchCursor<TResult>> operation;
+
+        AsyncReadOperation<MapReduceAsyncBatchCursor<TResult>> getOperation() {
+            return operation;
+        }
+
+        WrappedMapReduceReadOperation(final AsyncReadOperation<MapReduceAsyncBatchCursor<TResult>> operation) {
+            this.operation = operation;
+        }
+
+        @Override
+        public void executeAsync(final AsyncReadBinding binding, final SingleResultCallback<AsyncBatchCursor<TResult>> callback) {
+            operation.executeAsync(binding, new SingleResultCallback<MapReduceAsyncBatchCursor<TResult>>() {
+                @Override
+                public void onResult(final MapReduceAsyncBatchCursor<TResult> batchCursor, final Throwable t) {
+                    callback.onResult(batchCursor, t);
+                }
+            });
+        }
+    }
+
+    static class WrappedMapReduceWriteOperation implements AsyncWriteOperation<Void> {
+        private final AsyncWriteOperation<MapReduceStatistics> operation;
+
+        AsyncWriteOperation<MapReduceStatistics> getOperation() {
+            return operation;
+        }
+
+        WrappedMapReduceWriteOperation(final AsyncWriteOperation<MapReduceStatistics> operation) {
+            this.operation = operation;
+        }
+
+        @Override
+        public void executeAsync(final AsyncWriteBinding binding, final SingleResultCallback<Void> callback) {
+            operation.executeAsync(binding, new SingleResultCallback<MapReduceStatistics>() {
+                @Override
+                public void onResult(final MapReduceStatistics result, final Throwable t) {
+                    callback.onResult(null, t);
+                }
+            });
+        }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.mongodb.connection.ClusterDescription;
 import com.mongodb.connection.ServerDescription;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static com.mongodb.assertions.Assertions.notNull;
@@ -43,19 +44,25 @@ public final class CompositeServerSelector implements ServerSelector {
         if (serverSelectors.isEmpty()) {
             throw new IllegalArgumentException("Server selectors can not be an empty list");
         }
+        ArrayList<ServerSelector> mergedServerSelectors = new ArrayList<ServerSelector>();
         for (ServerSelector cur : serverSelectors) {
             if (cur == null) {
                 throw new IllegalArgumentException("Can not have a null server selector in the list of composed selectors");
             }
-        }
-        this.serverSelectors = new ArrayList<ServerSelector>();
-        for (ServerSelector cur : serverSelectors) {
             if (cur instanceof CompositeServerSelector) {
-                this.serverSelectors.addAll(((CompositeServerSelector) cur).serverSelectors);
+                mergedServerSelectors.addAll(((CompositeServerSelector) cur).serverSelectors);
             } else {
-                this.serverSelectors.add(cur);
+                mergedServerSelectors.add(cur);
             }
         }
+        this.serverSelectors = Collections.unmodifiableList(mergedServerSelectors);
+    }
+
+    /**
+     * @return the server selectors list.
+     */
+    public List<ServerSelector> getServerSelectors() {
+        return serverSelectors;
     }
 
     @Override
@@ -64,10 +71,33 @@ public final class CompositeServerSelector implements ServerSelector {
         List<ServerDescription> choices = null;
         for (ServerSelector cur : serverSelectors) {
             choices = cur.select(curClusterDescription);
-            curClusterDescription = new ClusterDescription(clusterDescription.getConnectionMode(), clusterDescription.getType(), choices);
+            curClusterDescription = new ClusterDescription(clusterDescription.getConnectionMode(), clusterDescription.getType(), choices,
+                                                                  clusterDescription.getClusterSettings(),
+                                                                  clusterDescription.getServerSettings());
         }
 
         return choices;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        CompositeServerSelector that = (CompositeServerSelector) o;
+        if (serverSelectors.size() != that.serverSelectors.size()) {
+            return false;
+        }
+        return serverSelectors.equals(that.serverSelectors);
+    }
+
+    @Override
+    public int hashCode() {
+        return serverSelectors != null ? serverSelectors.hashCode() : 0;
     }
 
     @Override

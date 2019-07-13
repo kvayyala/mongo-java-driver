@@ -9,13 +9,25 @@ title = "MongoDB Async Driver"
 
 ## MongoDB Async Java Driver Documentation
 
-Welcome to the MongoDB Async Java driver documentation hub.
+The following guide provides information on using the callback-based MongoDB Async Java Driver 3.10.
 
-### Getting Started
+{{% note %}}
+The callback-based Async Java Driver has been deprecated in favor of the 
+[MongoDB Reactive Streams Java Driver](http://mongodb.github.io/mongo-java-driver-reactivestreams/).
+{{% /note %}}
 
-The [Getting Started]({{< relref "driver-async/getting-started/index.md" >}}) guide contains installation instructions
-and a simple tutorial to get up  and running quickly.
+### What's New in 3.10
 
-### Reference
+The driver now natively supports TLS/SSL when used with Java 8+.  
 
-For more detailed documentation, see the [Reference]({{< relref "driver-async/reference/index.md" >}}) guide.
+### What's New in 3.9
+
+The callback-based MongoDB Async Java driver has been deprecated in the 3.9 release.  
+
+## Getting Started
+
+To get started, see the [Installation Guide]({{< relref "driver-async/getting-started/installation.md" >}}), the [Quick Start Guide]({{< relref "driver-async/getting-started/quick-start.md" >}}) and the [Quick Start with POJOs Guide]({{< relref "driver-async/getting-started/quick-start-pojo.md" >}})..
+
+## Tutorials
+
+For tutorials for some frequently used operations, see the [Tutorials section]({{<relref "driver-async/tutorials/index.md">}}).

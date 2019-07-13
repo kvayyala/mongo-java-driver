@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,38 +14,43 @@
  * limitations under the License.
  */
 
-apply plugin: 'osgi'
-apply plugin: 'org.kordamp.gradle.clirr'
-
-def configDir = new File(rootDir, 'config')
 archivesBaseName = 'mongodb-driver-async'
+description = 'The MongoDB Asynchronous Driver.'
+
+ext {
+    pomName = 'The MongoDB Asynchronous Driver'
+}
 
 sourceSets {
-    test.java.srcDirs += 'src/examples'
+    test.groovy.srcDirs += 'src/examples'
 }
 
 dependencies {
     compile project(':bson')
     compile project(':driver-core')
 
+    testCompile project(':bson').sourceSets.test.output
     testCompile project(':driver-core').sourceSets.test.output
 }
 
 clirr {
     excludeFilter = new File("$configDir/clirr-exclude.yml")
-    baseline 'org.mongodb:mongodb-driver-async:3.0.0'
+    baseline 'org.mongodb:mongodb-driver-async:3.8.0'
     failOnErrors = false
 }
 
 tasks.withType(Checkstyle) {
     // needed so the Javadoc checks can find the code in other modules
-    classpath = files(project(':driver-core').sourceSets.main.output, sourceSets.main.output);
+    classpath = files(project(':driver-core').sourceSets.main.output, sourceSets.main.output)
 }
 
-modifyPom {
-    project {
-        name 'MongoDB Asynchronous Driver'
-        description 'The MongoDB Asynchronous Driver'
-        url 'http://www.mongodb.org'
+jar {
+    manifest {
+        instruction 'Automatic-Module-Name', 'org.mongodb.driver.async.client'
+        instruction 'Build-Version', project.gitVersion
+        instruction 'Import-Package',
+                'org.bson.*',
+                'com.mongodb.*',
+                'io.netty.*;resolution:=optional'
     }
 }

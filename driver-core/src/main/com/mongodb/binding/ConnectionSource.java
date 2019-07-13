@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,14 @@ package com.mongodb.binding;
 
 import com.mongodb.connection.Connection;
 import com.mongodb.connection.ServerDescription;
+import com.mongodb.session.SessionContext;
 
 /**
  * A source of connections to a single MongoDB server.
  *
  * @since 3.0
  */
+@Deprecated
 public interface ConnectionSource extends ReferenceCounted {
 
     /**
@@ -32,6 +34,15 @@ public interface ConnectionSource extends ReferenceCounted {
      * @return the current details of the server state.
      */
     ServerDescription getServerDescription();
+
+    /**
+     * Gets the session context for this source
+     *
+     * @return the session context, which may not be null
+     *
+     * @since 3.6
+     */
+    SessionContext getSessionContext();
 
     /**
      * Gets a connection from this source.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import spock.lang.Specification
 
 import static Fixture.getDefaultDatabase
 import static Fixture.initializeCollection
+import static com.mongodb.async.client.Fixture.waitForLastServerSessionPoolRelease
 
 class FunctionalSpecification extends Specification {
     protected MongoDatabase database;
@@ -30,6 +31,10 @@ class FunctionalSpecification extends Specification {
     def setup() {
         database = getDefaultDatabase()
         collection = initializeCollection(new MongoNamespace(database.getName(), getClass().getName()))
+    }
+
+    def cleanup() {
+        waitForLastServerSessionPoolRelease();
     }
 
     String getDatabaseName() {

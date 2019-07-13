@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import com.mongodb.Block;
 import com.mongodb.Function;
 import com.mongodb.async.AsyncBatchCursor;
 import com.mongodb.async.SingleResultCallback;
+import com.mongodb.lang.Nullable;
 
 import java.util.Collection;
 
@@ -28,7 +29,9 @@ import java.util.Collection;
  *
  * @param <TResult> the result type
  * @since 3.0
+ * @deprecated Prefer the Reactive Streams-based asynchronous driver (mongodb-driver-reactivestreams artifactId)
  */
+@Deprecated
 public interface MongoIterable<TResult> {
 
     /**
@@ -73,6 +76,16 @@ public interface MongoIterable<TResult> {
      * @mongodb.driver.manual reference/method/cursor.batchSize/#cursor.batchSize Batch Size
      */
     MongoIterable<TResult> batchSize(int batchSize);
+
+    /**
+     * Gets the number of documents to return per batch or null if not set.
+     *
+     * @return the batch size, which may be null
+     * @mongodb.driver.manual reference/method/cursor.batchSize/#cursor.batchSize Batch Size
+     * @since 3.7
+     */
+    @Nullable
+    Integer getBatchSize();
 
     /**
      * Provide the underlying {@link com.mongodb.async.AsyncBatchCursor} allowing fine grained control of the cursor.

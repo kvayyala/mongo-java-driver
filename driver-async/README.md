@@ -1,6 +1,6 @@
 ## The MongoDB Asynchronous Java Driver
 
-A callback based fully non-blocking and asynchronous I/O operations MongoDB Java driver.
+A callback-based fully non-blocking and asynchronous I/O operations MongoDB Java driver.
 
 ## Binaries
 
@@ -107,7 +107,7 @@ Example for Maven:
     final CountDownLatch countLatch = new CountDownLatch(1);
     final AtomicLong count = new AtomicLong();
     System.out.println("Counting the number of documents");
-    collection.count(new SingleResultCallback<Long>() {
+    collection.countDocuments(new SingleResultCallback<Long>() {
         @Override
         public void onResult(final Long result, final Throwable t) {
             count.set(result);

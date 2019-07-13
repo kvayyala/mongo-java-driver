@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ public class PatternCodec implements Codec<Pattern> {
 
     private static final int GLOBAL_FLAG = 256;
 
-    private static enum RegexFlag {
+    private enum RegexFlag {
         CANON_EQ(Pattern.CANON_EQ, 'c', "Pattern.CANON_EQ"),
         UNIX_LINES(Pattern.UNIX_LINES, 'd', "Pattern.UNIX_LINES"),
         GLOBAL(GLOBAL_FLAG, 'g', null),

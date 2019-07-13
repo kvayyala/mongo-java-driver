@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,18 +26,17 @@ public class JsonScannerTest {
     @Test
     public void testEndOfFile() {
         String json = "\t ";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.END_OF_FILE, token.getType());
         assertEquals("<eof>", token.getValue());
-        assertEquals(-1, buffer.read());
     }
 
     @Test
     public void testBeginObject() {
         String json = "\t {x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.BEGIN_OBJECT, token.getType());
@@ -48,7 +47,7 @@ public class JsonScannerTest {
     @Test
     public void testEndObject() {
         String json = "\t }x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.END_OBJECT, token.getType());
@@ -59,7 +58,7 @@ public class JsonScannerTest {
     @Test
     public void testBeginArray() {
         String json = "\t [x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.BEGIN_ARRAY, token.getType());
@@ -70,7 +69,7 @@ public class JsonScannerTest {
     @Test
     public void testEndArray() {
         String json = "\t ]x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.END_ARRAY, token.getType());
@@ -81,7 +80,7 @@ public class JsonScannerTest {
     @Test
     public void testParentheses() {
         String json = "\t (jj)x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.LEFT_PAREN, token.getType());
@@ -96,7 +95,7 @@ public class JsonScannerTest {
     @Test
     public void testNameSeparator() {
         String json = "\t :x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.COLON, token.getType());
@@ -107,7 +106,7 @@ public class JsonScannerTest {
     @Test
     public void testValueSeparator() {
         String json = "\t ,x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.COMMA, token.getType());
@@ -118,7 +117,7 @@ public class JsonScannerTest {
     @Test
     public void testEmptyString() {
         String json = "\t \"\"x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.STRING, token.getType());
@@ -129,7 +128,7 @@ public class JsonScannerTest {
     @Test
     public void test1CharacterString() {
         String json = "\t \"1\"x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.STRING, token.getType());
@@ -140,7 +139,7 @@ public class JsonScannerTest {
     @Test
     public void test2CharacterString() {
         String json = "\t \"12\"x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.STRING, token.getType());
@@ -151,7 +150,7 @@ public class JsonScannerTest {
     @Test
     public void test3CharacterString() {
         String json = "\t \"123\"x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.STRING, token.getType());
@@ -162,7 +161,7 @@ public class JsonScannerTest {
     @Test
     public void testEscapeSequences() {
         String json = "\t \"x\\\"\\\\\\/\\b\\f\\n\\r\\t\\u0030y\"x";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.STRING, token.getType());
@@ -174,7 +173,7 @@ public class JsonScannerTest {
     @Test
     public void testTrue() {
         String json = "\t true,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -185,7 +184,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusInfinity() {
         String json = "\t -Infinity]";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -196,7 +195,7 @@ public class JsonScannerTest {
     @Test
     public void testFalse() {
         String json = "\t false,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -207,7 +206,7 @@ public class JsonScannerTest {
     @Test
     public void testNull() {
         String json = "\t null,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -218,7 +217,7 @@ public class JsonScannerTest {
     @Test
     public void testUndefined() {
         String json = "\t undefined,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -229,7 +228,7 @@ public class JsonScannerTest {
     @Test
     public void testUnquotedStringWithSeparator() {
         String json = "\t name123:1";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -240,7 +239,7 @@ public class JsonScannerTest {
     @Test
     public void testUnquotedString() {
         String json = "name123";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.UNQUOTED_STRING, token.getType());
@@ -251,7 +250,7 @@ public class JsonScannerTest {
     @Test
     public void testZero() {
         String json = "\t 0,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -262,7 +261,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZero() {
         String json = "\t -0,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -273,7 +272,7 @@ public class JsonScannerTest {
     @Test
     public void testOne() {
         String json = "\t 1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -284,7 +283,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusOne() {
         String json = "\t -1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -295,7 +294,7 @@ public class JsonScannerTest {
     @Test
     public void testTwelve() {
         String json = "\t 12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -306,7 +305,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusTwelve() {
         String json = "\t -12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.INT32, token.getType());
@@ -317,7 +316,7 @@ public class JsonScannerTest {
     @Test
     public void testZeroPointZero() {
         String json = "\t 0.0,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -328,7 +327,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZeroPointZero() {
         String json = "\t -0.0,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -339,7 +338,7 @@ public class JsonScannerTest {
     @Test
     public void testZeroExponentOne() {
         String json = "\t 0e1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -350,7 +349,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZeroExponentOne() {
         String json = "\t -0e1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -361,7 +360,7 @@ public class JsonScannerTest {
     @Test
     public void testZeroExponentMinusOne() {
         String json = "\t 0e-1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -372,7 +371,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZeroExponentMinusOne() {
         String json = "\t -0e-1,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -383,7 +382,7 @@ public class JsonScannerTest {
     @Test
     public void testOnePointTwo() {
         String json = "\t 1.2,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -394,7 +393,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusOnePointTwo() {
         String json = "\t -1.2,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -405,7 +404,7 @@ public class JsonScannerTest {
     @Test
     public void testOneExponentTwelve() {
         String json = "\t 1e12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -416,7 +415,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZeroExponentTwelve() {
         String json = "\t -1e12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -427,7 +426,7 @@ public class JsonScannerTest {
     @Test
     public void testOneExponentMinuesTwelve() {
         String json = "\t 1e-12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -438,7 +437,7 @@ public class JsonScannerTest {
     @Test
     public void testMinusZeroExponentMinusTwelve() {
         String json = "\t -1e-12,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.DOUBLE, token.getType());
@@ -449,7 +448,7 @@ public class JsonScannerTest {
     @Test
     public void testRegularExpressionEmpty() {
         String json = "\t //,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.REGULAR_EXPRESSION, token.getType());
@@ -465,7 +464,7 @@ public class JsonScannerTest {
     public void testRegularExpressionPattern() {
         String json = "\t /pattern/,";
 
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.REGULAR_EXPRESSION, token.getType());
@@ -476,7 +475,7 @@ public class JsonScannerTest {
     @Test
     public void testRegularExpressionPatternAndOptions() {
         String json = "\t /pattern/im,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.REGULAR_EXPRESSION, token.getType());
@@ -490,7 +489,7 @@ public class JsonScannerTest {
     @Test
     public void testRegularExpressionPatternAndEscapeSequence() {
         String json = "\t /patte\\.n/,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
         JsonToken token = scanner.nextToken();
         assertEquals(JsonTokenType.REGULAR_EXPRESSION, token.getType());
@@ -501,9 +500,17 @@ public class JsonScannerTest {
     @Test(expected = JsonParseException.class)
     public void testInvalidRegularExpression() {
         String json = "\t /pattern/nsk,";
-        JsonBuffer buffer = new JsonBuffer(json);
+        JsonBuffer buffer = new JsonStringBuffer(json);
         JsonScanner scanner = new JsonScanner(buffer);
-        JsonToken token = scanner.nextToken();
+        scanner.nextToken();
+    }
+
+    @Test(expected = JsonParseException.class)
+    public void testInvalidRegularExpressionNoEnd() {
+        String json = "/b";
+        JsonBuffer buffer = new JsonStringBuffer(json);
+        JsonScanner scanner = new JsonScanner(buffer);
+        scanner.nextToken();
     }
 
     @Test(expected = JsonParseException.class)

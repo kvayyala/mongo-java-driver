@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ public class BsonDocumentTest {
     @Test
     public void toJsonShouldRespectJsonWriterSettings() {
         StringWriter writer = new StringWriter();
-        JsonWriterSettings settings = new JsonWriterSettings(JsonMode.SHELL);
+        JsonWriterSettings settings = JsonWriterSettings.builder().outputMode(JsonMode.SHELL).build();
         new BsonDocumentCodec().encode(new JsonWriter(writer, settings), document, EncoderContext.builder().build());
         assertEquals(writer.toString(), document.toJson(settings));
     }

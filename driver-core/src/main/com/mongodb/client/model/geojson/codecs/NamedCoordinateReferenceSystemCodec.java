@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,12 +16,16 @@
 
 package com.mongodb.client.model.geojson.codecs;
 
+import com.mongodb.client.model.geojson.CoordinateReferenceSystem;
 import com.mongodb.client.model.geojson.NamedCoordinateReferenceSystem;
 import org.bson.BsonReader;
 import org.bson.BsonWriter;
 import org.bson.codecs.Codec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.EncoderContext;
+import org.bson.codecs.configuration.CodecConfigurationException;
+
+import static com.mongodb.client.model.geojson.codecs.GeometryDecoderHelper.decodeCoordinateReferenceSystem;
 
 /**
  * Codec for a GeoJson Coordinate Reference System of type name.
@@ -47,6 +53,10 @@ public class NamedCoordinateReferenceSystemCodec implements Codec<NamedCoordinat
 
     @Override
     public NamedCoordinateReferenceSystem decode(final BsonReader reader, final DecoderContext decoderContext) {
-        throw new UnsupportedOperationException("Not implemented yet!");
+        CoordinateReferenceSystem crs = decodeCoordinateReferenceSystem(reader);
+        if (crs == null || !(crs instanceof NamedCoordinateReferenceSystem)) {
+            throw new CodecConfigurationException("Invalid NamedCoordinateReferenceSystem.");
+        }
+        return (NamedCoordinateReferenceSystem) crs;
     }
 }

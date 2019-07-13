@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ package com.mongodb.operation;
  * @param <T> the operations result type.
  * @since 3.0
  */
+@Deprecated
 public interface MapReduceBatchCursor<T> extends BatchCursor<T> {
     /**
      * Get the statistics for this map-reduce operation

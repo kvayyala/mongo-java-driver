@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +17,27 @@
 package com.mongodb.operation;
 
 import com.mongodb.MongoNamespace;
+import com.mongodb.WriteConcern;
 import com.mongodb.async.SingleResultCallback;
 import com.mongodb.binding.AsyncWriteBinding;
 import com.mongodb.binding.WriteBinding;
+import com.mongodb.connection.AsyncConnection;
+import com.mongodb.connection.Connection;
+import com.mongodb.connection.ConnectionDescription;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
 
 import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
-import static com.mongodb.operation.OperationHelper.VoidTransformer;
+import static com.mongodb.internal.async.ErrorHandlingResultCallback.errorHandlingCallback;
+import static com.mongodb.operation.CommandOperationHelper.executeCommand;
+import static com.mongodb.operation.CommandOperationHelper.executeCommandAsync;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorWriteTransformer;
+import static com.mongodb.operation.OperationHelper.LOGGER;
+import static com.mongodb.operation.OperationHelper.releasingCallback;
+import static com.mongodb.operation.OperationHelper.withConnection;
+import static com.mongodb.internal.operation.WriteConcernHelper.appendWriteConcernToCommand;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorTransformer;
 
 /**
  * An operation that renames the given collection to the new name.
@@ -38,18 +48,46 @@ import static com.mongodb.operation.OperationHelper.VoidTransformer;
  * @mongodb.driver.manual reference/command/renameCollection renameCollection
  * @since 3.0
  */
+@Deprecated
 public class RenameCollectionOperation implements AsyncWriteOperation<Void>, WriteOperation<Void> {
     private final MongoNamespace originalNamespace;
     private final MongoNamespace newNamespace;
+    private final WriteConcern writeConcern;
     private boolean dropTarget;
 
     /**
      * @param originalNamespace the name of the collection to rename
      * @param newNamespace      the desired new name for the collection
+     * @deprecated Prefer {@link #RenameCollectionOperation(MongoNamespace, MongoNamespace, WriteConcern)}
      */
+    @Deprecated
     public RenameCollectionOperation(final MongoNamespace originalNamespace, final MongoNamespace newNamespace) {
+        this(originalNamespace, newNamespace, null);
+    }
+
+    /**
+     * @param originalNamespace the name of the collection to rename
+     * @param newNamespace      the desired new name for the collection
+     * @param writeConcern      the writeConcern
+     *
+     * @since 3.4
+     */
+    public RenameCollectionOperation(final MongoNamespace originalNamespace, final MongoNamespace newNamespace,
+                                     final WriteConcern writeConcern) {
         this.originalNamespace = notNull("originalNamespace", originalNamespace);
         this.newNamespace = notNull("newNamespace", newNamespace);
+        this.writeConcern = writeConcern;
+    }
+
+    /**
+     * Gets the write concern.
+     *
+     * @return the write concern, which may be null
+     *
+     * @since 3.4
+     */
+    public WriteConcern getWriteConcern() {
+        return writeConcern;
     }
 
     /**
@@ -82,17 +120,36 @@ public class RenameCollectionOperation implements AsyncWriteOperation<Void>, Wri
      */
     @Override
     public Void execute(final WriteBinding binding) {
-        return executeWrappedCommandProtocol("admin", getCommand(), binding, new VoidTransformer<BsonDocument>());
+        return withConnection(binding, new OperationHelper.CallableWithConnection<Void>() {
+            @Override
+            public Void call(final Connection connection) {
+                return executeCommand(binding, "admin", getCommand(connection.getDescription()), connection,
+                        writeConcernErrorTransformer());
+            }
+        });
     }
 
     @Override
     public void executeAsync(final AsyncWriteBinding binding, final SingleResultCallback<Void> callback) {
-        executeWrappedCommandProtocolAsync("admin", getCommand(), binding, new VoidTransformer<BsonDocument>(), callback);
+        withConnection(binding, new OperationHelper.AsyncCallableWithConnection() {
+            @Override
+            public void call(final AsyncConnection connection, final Throwable t) {
+                SingleResultCallback<Void> errHandlingCallback = errorHandlingCallback(callback, LOGGER);
+                if (t != null) {
+                    errHandlingCallback.onResult(null, t);
+                } else {
+                    executeCommandAsync(binding, "admin", getCommand(connection.getDescription()), connection,
+                            writeConcernErrorWriteTransformer(), releasingCallback(errHandlingCallback, connection));
+                }
+            }
+        });
     }
 
-    private BsonDocument getCommand() {
-        return new BsonDocument("renameCollection", new BsonString(originalNamespace.getFullName()))
-                   .append("to", new BsonString(newNamespace.getFullName()))
-                   .append("dropTarget", BsonBoolean.valueOf(dropTarget));
+    private BsonDocument getCommand(final ConnectionDescription description) {
+        BsonDocument commandDocument = new BsonDocument("renameCollection", new BsonString(originalNamespace.getFullName()))
+                                            .append("to", new BsonString(newNamespace.getFullName()))
+                                            .append("dropTarget", BsonBoolean.valueOf(dropTarget));
+        appendWriteConcernToCommand(writeConcern, commandDocument, description);
+        return commandDocument;
     }
 }

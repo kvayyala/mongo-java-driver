@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.mongodb.bulk;
 
+import com.mongodb.client.model.Collation;
 import org.bson.BsonDocument;
 
 import static com.mongodb.assertions.Assertions.notNull;
@@ -25,9 +26,11 @@ import static com.mongodb.assertions.Assertions.notNull;
  *
  * @since 3.0
  */
+@Deprecated
 public final class DeleteRequest extends WriteRequest {
     private final BsonDocument filter;
     private boolean isMulti = true;
+    private Collation collation;
 
     /**
      * Construct a new instance.
@@ -66,6 +69,31 @@ public final class DeleteRequest extends WriteRequest {
      */
     public boolean isMulti() {
         return isMulti;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public DeleteRequest collation(final Collation collation) {
+        this.collation = collation;
+        return this;
     }
 
     @Override

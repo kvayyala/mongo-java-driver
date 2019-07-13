@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package com.mongodb.client.model.geojson;
 
 import com.mongodb.client.model.geojson.codecs.GeoJsonCodecProvider;
+import com.mongodb.lang.Nullable;
 import org.bson.codecs.Codec;
 import org.bson.codecs.EncoderContext;
 import org.bson.codecs.configuration.CodecRegistries;
@@ -50,7 +51,7 @@ public abstract class Geometry {
      *
      * @param coordinateReferenceSystem the coordinate reference system
      */
-    protected Geometry(final CoordinateReferenceSystem coordinateReferenceSystem) {
+    protected Geometry(@Nullable final CoordinateReferenceSystem coordinateReferenceSystem) {
         this.coordinateReferenceSystem = coordinateReferenceSystem;
     }
 
@@ -66,7 +67,7 @@ public abstract class Geometry {
      *
      * @return the GeoJSON representation
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked", "rawtypes", "deprecation"})
     public String toJson() {
         StringWriter stringWriter = new StringWriter();
         JsonWriter writer = new JsonWriter(stringWriter, new JsonWriterSettings());
@@ -84,6 +85,7 @@ public abstract class Geometry {
      *
      * @return the possibly-null coordinate reference system
      */
+    @Nullable
     public CoordinateReferenceSystem getCoordinateReferenceSystem() {
         return coordinateReferenceSystem;
     }

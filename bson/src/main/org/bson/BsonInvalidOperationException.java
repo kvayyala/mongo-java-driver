@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,5 +31,16 @@ public class BsonInvalidOperationException extends BSONException {
      */
     public BsonInvalidOperationException(final String message) {
         super(message);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param message the message
+     * @param t       the throwable cause.
+     * @since 3.5
+     */
+    public BsonInvalidOperationException(final String message, final Throwable t) {
+        super(message, t);
     }
 }

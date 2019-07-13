@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import org.bson.io.ByteBufferBsonInput;
 import org.bson.types.Binary;
 import org.bson.types.Code;
 import org.bson.types.CodeWithScope;
+import org.bson.types.Decimal128;
 import org.bson.types.MaxKey;
 import org.bson.types.MinKey;
 import org.bson.types.ObjectId;
@@ -72,6 +73,7 @@ public class DocumentCodecTest {
         doc.put("long", 2L);
         doc.put("string", "hello");
         doc.put("double", 3.2);
+        doc.put("decimal", Decimal128.parse("0.100"));
         doc.put("binary", new Binary(BsonBinarySubType.USER_DEFINED, new byte[]{0, 1, 2, 3}));
         doc.put("date", new Date(1000));
         doc.put("boolean", true);

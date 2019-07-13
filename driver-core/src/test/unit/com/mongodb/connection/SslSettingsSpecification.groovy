@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,38 +21,44 @@ import com.mongodb.MongoInternalException
 import spock.lang.IgnoreIf
 import spock.lang.Specification
 
-import static com.mongodb.connection.SslSettings.builder
+import javax.net.ssl.SSLContext
 
+import static com.mongodb.ClusterFixture.isNotAtLeastJava7
 
 class SslSettingsSpecification extends Specification {
-    def 'should default to disabled'() {
-        expect:
-        !builder().build().enabled
+
+    def 'should have the expected defaults'() {
+        when:
+        def settings = SslSettings.builder().build()
+
+        then:
+        settings.context == null
+        !settings.enabled
+        !settings.invalidHostNameAllowed
     }
 
-    @IgnoreIf({ System.getProperty('java.version').startsWith('1.6.') })
-    def 'should enable'() {
-        expect:
-        builder().enabled(true).build().enabled
-    }
+    @IgnoreIf({ isNotAtLeastJava7() })
+    def 'should set settings'() {
+        when:
+        def settings = SslSettings.builder()
+                .context(SSLContext.getDefault())
+                .enabled(true)
+                .invalidHostNameAllowed(true)
+                .build()
 
-    def 'should default to disallow invalid host name'() {
-        expect:
-        !builder().build().invalidHostNameAllowed
-    }
-
-    def 'should allow invalid host name'() {
-        expect:
-        builder().invalidHostNameAllowed(true).build().invalidHostNameAllowed
+        then:
+        settings.context == SSLContext.getDefault()
+        settings.enabled
+        settings.invalidHostNameAllowed
     }
 
     def 'should not allow invalid host name on Java 6'() {
         given:
         String javaVersion = System.getProperty('java.version')
-        when:
 
+        when:
         System.setProperty('java.version', '1.6.0_45')
-        builder().enabled(true).build()
+        SslSettings.builder().enabled(true).build()
 
         then:
         def e = thrown(MongoInternalException)
@@ -62,39 +68,76 @@ class SslSettingsSpecification extends Specification {
         System.setProperty('java.version', javaVersion)
     }
 
+    @IgnoreIf({ isNotAtLeastJava7() })
     def 'should apply connection string without ssl'() {
         expect:
-        !builder().applyConnectionString(new ConnectionString('mongodb://localhost')).build().enabled
-        !builder().applyConnectionString(new ConnectionString('mongodb://localhost/?ssl=false')).build().enabled
-        !builder().applyConnectionString(new ConnectionString('mongodb://localhost')).build().invalidHostNameAllowed
-        !builder().applyConnectionString(new ConnectionString('mongodb://localhost/?ssl=false')).build().invalidHostNameAllowed
+        builder.applyConnectionString(new ConnectionString(connectionString)).build() == expected
+
+        where:
+        connectionString                        | builder                               | expected
+        'mongodb://localhost'                   | SslSettings.builder()                 | SslSettings.builder().build()
+        'mongodb://localhost/?ssl=false'        | SslSettings.builder()                 | SslSettings.builder().build()
+        'mongodb://localhost/?ssl=true'         | SslSettings.builder()                 | SslSettings.builder().enabled(true).build()
+        'mongodb://localhost/?ssl=true' +
+            '&sslInvalidHostNameAllowed=true'   | SslSettings.builder()                 | SslSettings.builder().enabled(true)
+                                                                                            .invalidHostNameAllowed(true).build()
+        'mongodb://localhost/?ssl=true' +
+            '&sslInvalidHostNameAllowed=true'   | SslSettings.builder()
+                                                    .context(SSLContext.getDefault())    | SslSettings.builder().enabled(true)
+                                                                                                .context(SSLContext.getDefault())
+                                                                                                .invalidHostNameAllowed(true).build()
     }
 
-    @IgnoreIf({ System.getProperty('java.version').startsWith('1.6.') })
-    def 'should apply connection string with ssl'() {
+    @IgnoreIf({ isNotAtLeastJava7() })
+    def 'should apply settings'() {
+        given:
+        def defaultSettings = SslSettings.builder().build()
+        def customSettings = SslSettings.builder()
+                .context(SSLContext.getDefault())
+                .enabled(true)
+                .invalidHostNameAllowed(true)
+                .build()
+
         expect:
-        builder().applyConnectionString(new ConnectionString('mongodb://localhost/?ssl=true')).build().enabled
-        !builder().applyConnectionString(new ConnectionString('mongodb://localhost/?ssl=true')).build().invalidHostNameAllowed
+        SslSettings.builder().applySettings(customSettings).build() == customSettings
+        SslSettings.builder(customSettings).applySettings(defaultSettings).build() == defaultSettings
     }
 
-    def 'should apply connection string with ssl and invalidHostNameAllowed'() {
-        expect:
-        builder().applyConnectionString(new ConnectionString('mongodb://localhost/?ssl=true')).invalidHostNameAllowed(true).build().enabled
+    @IgnoreIf({ isNotAtLeastJava7() })
+    def 'should apply builder settings'() {
+        when:
+        def original = SslSettings.builder().enabled(true)
+                .context(SSLContext.getDefault())
+                .invalidHostNameAllowed(true).build()
+
+        def settings = SslSettings.builder(original).build()
+
+        then:
+        original == settings
     }
 
     def 'equivalent settings should be equal and have the same hash code'() {
         expect:
-        builder().build() == builder().build()
-        builder().build().hashCode() == builder().build().hashCode()
-        builder().enabled(true).invalidHostNameAllowed(true).build() == builder().enabled(true).invalidHostNameAllowed(true).build()
-        builder().enabled(true).invalidHostNameAllowed(true).build().hashCode() ==
-        builder().enabled(true).invalidHostNameAllowed(true).build().hashCode()
+        SslSettings.builder().build() == SslSettings.builder().build()
+        SslSettings.builder().build().hashCode() == SslSettings.builder().build().hashCode()
+        SslSettings.builder().enabled(true).invalidHostNameAllowed(true).build() ==
+                SslSettings.builder().enabled(true).invalidHostNameAllowed(true).build()
+        SslSettings.builder().enabled(true).invalidHostNameAllowed(true).build().hashCode() ==
+                SslSettings.builder().enabled(true).invalidHostNameAllowed(true).build().hashCode()
+        SslSettings.builder().enabled(true).invalidHostNameAllowed(true).context(SSLContext.getDefault()).build() ==
+                SslSettings.builder().enabled(true).invalidHostNameAllowed(true)
+                        .context(SSLContext.getDefault()).build()
+        SslSettings.builder().enabled(true).invalidHostNameAllowed(true)
+                .context(SSLContext.getDefault()).build().hashCode() ==
+                SslSettings.builder().enabled(true).invalidHostNameAllowed(true)
+                        .context(SSLContext.getDefault()).build().hashCode()
     }
 
-    @IgnoreIf({ System.getProperty('java.version').startsWith('1.6.') })
+    @IgnoreIf({ isNotAtLeastJava7() })
     def 'unequivalent settings should not be equal or have the same hash code'() {
         expect:
-        builder().build() != builder().enabled(true).build()
-        builder().build() != builder().invalidHostNameAllowed(true).build()
+        SslSettings.builder().build() != SslSettings.builder().enabled(true).build()
+        SslSettings.builder().build() != SslSettings.builder().invalidHostNameAllowed(true).build()
+        SslSettings.builder().build() != SslSettings.builder().context(SSLContext.getDefault()).build()
     }
 }

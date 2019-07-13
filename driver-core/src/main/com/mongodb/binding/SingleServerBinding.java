@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,9 @@ import com.mongodb.connection.Cluster;
 import com.mongodb.connection.Connection;
 import com.mongodb.connection.Server;
 import com.mongodb.connection.ServerDescription;
+import com.mongodb.internal.connection.NoOpSessionContext;
 import com.mongodb.selector.ServerAddressSelector;
+import com.mongodb.session.SessionContext;
 
 import static com.mongodb.assertions.Assertions.notNull;
 
@@ -31,6 +33,7 @@ import static com.mongodb.assertions.Assertions.notNull;
  *
  * @since 3.0
  */
+@Deprecated
 public class SingleServerBinding extends AbstractReferenceCounted implements ReadWriteBinding {
     private final Cluster cluster;
     private final ServerAddress serverAddress;
@@ -73,6 +76,11 @@ public class SingleServerBinding extends AbstractReferenceCounted implements Rea
     }
 
     @Override
+    public SessionContext getSessionContext() {
+        return NoOpSessionContext.INSTANCE;
+    }
+
+    @Override
     public SingleServerBinding retain() {
         super.retain();
         return this;
@@ -92,6 +100,11 @@ public class SingleServerBinding extends AbstractReferenceCounted implements Rea
         }
 
         @Override
+        public SessionContext getSessionContext() {
+            return NoOpSessionContext.INSTANCE;
+        }
+
+        @Override
         public Connection getConnection() {
             return cluster.selectServer(new ServerAddressSelector(serverAddress)).getConnection();
         }
@@ -99,13 +112,15 @@ public class SingleServerBinding extends AbstractReferenceCounted implements Rea
         @Override
         public ConnectionSource retain() {
             super.retain();
-            SingleServerBinding.this.retain();
             return this;
         }
 
         @Override
         public void release() {
-            SingleServerBinding.this.release();
+            super.release();
+            if (super.getCount() == 0) {
+                SingleServerBinding.this.release();
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@
 
 package com.mongodb;
 
+import com.mongodb.lang.Nullable;
 import org.bson.BsonValue;
 
 /**
  * The result of a successful write operation.  If the write was unacknowledged, then {@code wasAcknowledged} will return false and all
- * other methods with throw {@code MongoUnacknowledgedWriteException}.
+ * other methods will throw {@code MongoUnacknowledgedWriteException}.
  *
  * @see com.mongodb.WriteConcern#UNACKNOWLEDGED
  * @since 3.0
@@ -56,6 +57,7 @@ public abstract class WriteConcernResult {
      * @return the value of _id if this write resulted in an upsert.
      * @throws UnsupportedOperationException if the write was unacknowledged.
      */
+    @Nullable
     public abstract BsonValue getUpsertedId();
 
     /**
@@ -66,7 +68,7 @@ public abstract class WriteConcernResult {
      * @param upsertedId if an upsert resulted in an inserted document, this is the _id of that document.  This may be null
      * @return an acknowledged WriteConcernResult
      */
-    public static WriteConcernResult acknowledged(final int count, final boolean isUpdateOfExisting, final BsonValue upsertedId) {
+    public static WriteConcernResult acknowledged(final int count, final boolean isUpdateOfExisting, @Nullable final BsonValue upsertedId) {
         return new WriteConcernResult() {
             @Override
             public boolean wasAcknowledged() {
@@ -84,6 +86,7 @@ public abstract class WriteConcernResult {
             }
 
             @Override
+            @Nullable
             public BsonValue getUpsertedId() {
                 return upsertedId;
             }

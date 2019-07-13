@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,13 +19,19 @@ package com.mongodb.event;
 import com.mongodb.annotations.Beta;
 import com.mongodb.connection.ConnectionId;
 
+import static org.bson.assertions.Assertions.notNull;
+
 /**
  * An event signifying that a message has been received on a connection.
+ *
+ * @deprecated - No longer used
  */
 @Beta
-public class ConnectionMessageReceivedEvent extends ConnectionEvent {
+@Deprecated
+public final class ConnectionMessageReceivedEvent {
     private final int responseTo;
     private final int size;
+    private final ConnectionId connectionId;
 
     /**
      * Constructs a new instance of the event.
@@ -35,7 +41,7 @@ public class ConnectionMessageReceivedEvent extends ConnectionEvent {
      * @param size          the size of the received message
      */
     public ConnectionMessageReceivedEvent(final ConnectionId connectionId, final int responseTo, final int size) {
-        super(connectionId);
+        this.connectionId = notNull("connectionId", connectionId);
         this.responseTo = responseTo;
         this.size = size;
     }
@@ -56,5 +62,23 @@ public class ConnectionMessageReceivedEvent extends ConnectionEvent {
      */
     public int getSize() {
         return size;
+    }
+
+    /**
+     * Gets the identifier for this connection.
+     *
+     * @return the connection id
+     */
+    public ConnectionId getConnectionId() {
+        return connectionId;
+    }
+
+    @Override
+    public String toString() {
+        return "ConnectionMessageReceivedEvent{"
+                       + "responseTo=" + responseTo
+                       + ", size=" + size
+                       + ", connectionId=" + connectionId
+                       + '}';
     }
 }

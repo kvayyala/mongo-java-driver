@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 package com.mongodb.operation
 
-import category.Async
-import com.mongodb.Block
+import com.mongodb.MongoNamespace
 import com.mongodb.OperationFunctionalSpecification
+import com.mongodb.ReadPreference
 import org.bson.BsonArray
 import org.bson.BsonDocument
 import org.bson.BsonInt32
@@ -26,12 +26,67 @@ import org.bson.BsonJavaScript
 import org.bson.BsonString
 import org.bson.Document
 import org.bson.codecs.DocumentCodec
-import org.junit.experimental.categories.Category
+import spock.lang.IgnoreIf
 
-import static com.mongodb.ClusterFixture.getBinding
-import static com.mongodb.ClusterFixture.loopCursor
+import static com.mongodb.ClusterFixture.serverVersionAtLeast
 
+@IgnoreIf({ serverVersionAtLeast(4, 1) })
 class GroupOperationSpecification extends OperationFunctionalSpecification {
+
+    def reduceFunction = new BsonJavaScript('''
+            function ( curr, result ) {
+                if (result.name.indexOf(curr.name) == -1) { result.name.push(curr.name); }
+            }
+    ''')
+    def initial() {
+        new BsonDocument('name': new BsonArray())
+    }
+    def documentCodec = new DocumentCodec()
+
+    def 'should have the correct defaults and passed values'() {
+        when:
+        def initial = initial()
+        def operation = new GroupOperation(getNamespace(), reduceFunction, initial, documentCodec)
+
+        then:
+        operation.getNamespace() == getNamespace()
+        operation.getDecoder() == documentCodec
+        operation.getReduceFunction() == reduceFunction
+        operation.getInitial() == initial
+        operation.getKey() == null
+        operation.getKeyFunction() == null
+        operation.getFinalizeFunction() == null
+        operation.getFilter() == null
+        operation.getCollation() == null
+    }
+
+    def 'should set optional values correctly'(){
+        given:
+        def filter = new BsonDocument('filter', new BsonInt32(1))
+        def key = new BsonDocument('a', new BsonInt32(1))
+        def keyFunction = new BsonJavaScript('function(doc){ return {name: doc.name}; }')
+        def finalizeFunction = new BsonJavaScript('function(key, value) { return value }')
+        def initial = initial()
+
+        when:
+        def operation = new GroupOperation(getNamespace(), reduceFunction, initial, documentCodec)
+                .filter(filter)
+                .key(key)
+                .keyFunction(keyFunction)
+                .finalizeFunction(finalizeFunction)
+                .collation(defaultCollation)
+
+        then:
+        operation.getNamespace() == getNamespace()
+        operation.getDecoder() == documentCodec
+        operation.getReduceFunction() == reduceFunction
+        operation.getInitial() == initial
+        operation.getFilter() == filter
+        operation.getKey() == key
+        operation.getKeyFunction() == keyFunction
+        operation.getFinalizeFunction() == finalizeFunction
+        operation.getCollation() == defaultCollation
+    }
 
     def 'should be able to group by inferring from the reduce function'() {
         given:
@@ -39,16 +94,16 @@ class GroupOperationSpecification extends OperationFunctionalSpecification {
         Document sam = new Document('name', 'Sam').append('job', 'plumber')
         Document pete2 = new Document('name', 'Pete').append('job', 'electrician')
         getCollectionHelper().insertDocuments(new DocumentCodec(), pete, sam, pete2)
+        def operation = new GroupOperation(getNamespace(), reduceFunction, initial(), documentCodec)
 
         when:
-        def result = new GroupOperation(getNamespace(),
-                                        new BsonJavaScript('function ( curr, result ) { if (result.name.indexOf(curr.name) == -1) { ' +
-                                                           'result.name.push(curr.name); }}'),
-                                        new BsonDocument('name': new BsonArray()), new DocumentCodec())
-                .execute(getBinding());
+        def results = executeAndCollectBatchCursorResults(operation, async)
 
         then:
-        result.next()[0].name == ['Pete', 'Sam']
+        results.head().name == ['Pete', 'Sam']
+
+        where:
+        async << [true, false]
     }
 
     def 'should be able to group by name'() {
@@ -58,16 +113,17 @@ class GroupOperationSpecification extends OperationFunctionalSpecification {
         Document pete2 = new Document('name', 'Pete').append('job', 'electrician')
         getCollectionHelper().insertDocuments(new DocumentCodec(), pete, sam, pete2)
 
+        def operation = new GroupOperation(getNamespace(), new BsonJavaScript('function ( curr, result ) {}'), new BsonDocument(),
+                documentCodec).key(new BsonDocument('name', new BsonInt32(1)))
+
         when:
-        def result = new GroupOperation(getNamespace(),
-                                        new BsonJavaScript('function ( curr, result ) {}'),
-                                        new BsonDocument(), new DocumentCodec())
-                .key(new BsonDocument('name', new BsonInt32(1)))
-                .execute(getBinding());
+        def results = executeAndCollectBatchCursorResults(operation, async)
 
         then:
-        List<String> results = result.iterator().next()*.getString('name')
-        results.containsAll(['Pete', 'Sam'])
+        results*.getString('name').containsAll(['Pete', 'Sam'])
+
+        where:
+        async << [true, false]
     }
 
     def 'should be able to group by key function'() {
@@ -76,17 +132,17 @@ class GroupOperationSpecification extends OperationFunctionalSpecification {
         Document sam = new Document('name', 'Sam').append('job', 'plumber')
         Document pete2 = new Document('name', 'Pete').append('job', 'electrician')
         getCollectionHelper().insertDocuments(new DocumentCodec(), pete, sam, pete2)
+        def operation = new GroupOperation(getNamespace(),  new BsonJavaScript('function ( curr, result ) { }'), new BsonDocument(),
+                documentCodec).keyFunction(new BsonJavaScript('function(doc){ return {name: doc.name}; }'))
 
         when:
-        def result = new GroupOperation(getNamespace(),
-                                        new BsonJavaScript('function ( curr, result ) { }'),
-                                        new BsonDocument(), new DocumentCodec())
-                .keyFunction(new BsonJavaScript('function(doc){ return {name: doc.name}; }'))
-                .execute(getBinding());
+        def results = executeAndCollectBatchCursorResults(operation, async)
 
         then:
-        List<String> results = result.iterator().next()*.getString('name')
-        results.containsAll(['Pete', 'Sam'])
+        results*.getString('name').containsAll(['Pete', 'Sam'])
+
+        where:
+        async << [true, false]
     }
 
 
@@ -96,45 +152,66 @@ class GroupOperationSpecification extends OperationFunctionalSpecification {
         Document sam = new Document('name', 'Sam').append('job', 'plumber')
         Document pete2 = new Document('name', 'Pete').append('job', 'electrician')
         getCollectionHelper().insertDocuments(new DocumentCodec(), pete, sam, pete2)
-
-        when:
-        def result = new GroupOperation(getNamespace(),
+        def operation = new GroupOperation(getNamespace(),
                                         new BsonJavaScript('function ( curr, result ) { }'),
-                                        new BsonDocument(), new DocumentCodec())
+                                        new BsonDocument(), documentCodec)
                 .key(new BsonDocument('name', new BsonInt32(1)))
                 .filter(new BsonDocument('name': new BsonString('Pete')))
-                .execute(getBinding());
-
-        then:
-        List<String> results = result.iterator().next()*.getString('name')
-        results == ['Pete']
-    }
-
-    @Category(Async)
-    def 'should be able to group by name asynchronously'() {
-        given:
-        Document pete = new Document('name', 'Pete').append('job', 'handyman')
-        Document sam = new Document('name', 'Sam').append('job', 'plumber')
-        Document pete2 = new Document('name', 'Pete').append('job', 'electrician')
-        getCollectionHelper().insertDocuments(new DocumentCodec(), pete, sam, pete2)
 
         when:
-        def operation = new GroupOperation(getNamespace(),
-                                        new BsonJavaScript('function ( curr, result ) {}'),
-                                        new BsonDocument(), new DocumentCodec())
-                .key(new BsonDocument('name', new BsonInt32(1)))
-
-        List<Document> docList = []
-        loopCursor(operation, new Block<Document>() {
-            @Override
-            void apply(final Document value) {
-                if (value != null) {
-                    docList += value
-                }
-            }
-        });
+        def results = executeAndCollectBatchCursorResults(operation, async)
 
         then:
-        docList.iterator()*.getString('name') containsAll(['Pete', 'Sam'])
+        results*.getString('name') == ['Pete']
+
+        where:
+        async << [true, false]
+    }
+
+    def 'should use the ReadBindings readPreference to set slaveOK'() {
+        when:
+        def commandResult = BsonDocument.parse('{ok: 1.0}').append('retval', new BsonArrayWrapper([]))
+        def namespace = new MongoNamespace('db', 'coll')
+        def operation = new GroupOperation(namespace, new BsonJavaScript('function ( curr, result ) { }'), new BsonDocument(),
+                documentCodec).key(BsonDocument.parse('{name: 1}'))
+
+        then:
+        testOperationSlaveOk(operation, [3, 2, 0], readPreference, async, commandResult)
+
+        where:
+        [async, readPreference] << [[true, false], [ReadPreference.primary(), ReadPreference.secondary()]].combinations()
+    }
+
+    def 'should throw an exception when using an unsupported Collation'() {
+        def operation = new GroupOperation(namespace, new BsonJavaScript('function ( curr, result ) { }'), new BsonDocument(),
+                documentCodec).key(BsonDocument.parse('{str: 1}')).collation(caseInsensitiveCollation)
+
+        when:
+        testOperationThrows(operation, [3, 2, 0], async)
+
+        then:
+        def exception = thrown(IllegalArgumentException)
+        exception.getMessage().startsWith('Collation not supported by server version:')
+
+        where:
+        async << [false, false]
+    }
+
+    @IgnoreIf({ !serverVersionAtLeast(3, 4) })
+    def 'should support collation'() {
+        given:
+        def document = Document.parse('{str: "foo"}')
+        getCollectionHelper().insertDocuments(document)
+        def operation = new GroupOperation(namespace, new BsonJavaScript('function ( curr, result ) { }'), new BsonDocument(),
+                documentCodec).key(BsonDocument.parse('{str: 1}')).collation(caseInsensitiveCollation)
+
+        when:
+        def result = executeAndCollectBatchCursorResults(operation, async)
+
+        then:
+        result == [document]
+
+        where:
+        async << [true, false]
     }
 }

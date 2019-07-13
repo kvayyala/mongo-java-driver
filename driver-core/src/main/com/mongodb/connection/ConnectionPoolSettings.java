@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,10 +19,15 @@ package com.mongodb.connection;
 import com.mongodb.ConnectionString;
 import com.mongodb.annotations.Immutable;
 import com.mongodb.annotations.NotThreadSafe;
+import com.mongodb.event.ConnectionPoolListener;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.assertions.Assertions.isTrue;
+import static com.mongodb.assertions.Assertions.notNull;
+import static java.util.Collections.unmodifiableList;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
@@ -33,6 +38,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
  */
 @Immutable
 public class ConnectionPoolSettings {
+    private final List<ConnectionPoolListener> connectionPoolListeners;
     private final int maxSize;
     private final int minSize;
     private final int maxWaitQueueSize;
@@ -52,10 +58,22 @@ public class ConnectionPoolSettings {
     }
 
     /**
+     * Gets a Builder for creating a new ConnectionPoolSettings instance.
+     *
+     * @param connectionPoolSettings the existing connection pool settings to configure the builder with
+     * @return a new Builder for ConnectionPoolSettings
+     * @since 3.5
+     */
+    public static Builder builder(final ConnectionPoolSettings connectionPoolSettings) {
+        return builder().applySettings(connectionPoolSettings);
+    }
+
+    /**
      * A builder for creating ConnectionPoolSettings.
      */
     @NotThreadSafe
-    public static class Builder {
+    public static final class Builder {
+        private List<ConnectionPoolListener> connectionPoolListeners = new ArrayList<ConnectionPoolListener>();
         private int maxSize = 100;
         private int minSize;
         private int maxWaitQueueSize = 500;
@@ -64,6 +82,32 @@ public class ConnectionPoolSettings {
         private long maxConnectionIdleTimeMS;
         private long maintenanceInitialDelayMS;
         private long maintenanceFrequencyMS = MILLISECONDS.convert(1, MINUTES);
+
+        Builder() {
+        }
+
+        /**
+         * Applies the connectionPoolSettings to the builder
+         *
+         * <p>Note: Overwrites all existing settings</p>
+         *
+         * @param connectionPoolSettings the connectionPoolSettings
+         * @return this
+         * @since 3.7
+         */
+        public Builder applySettings(final ConnectionPoolSettings connectionPoolSettings) {
+            notNull("connectionPoolSettings", connectionPoolSettings);
+            connectionPoolListeners = new ArrayList<ConnectionPoolListener>(connectionPoolSettings.connectionPoolListeners);
+            maxSize = connectionPoolSettings.maxSize;
+            minSize = connectionPoolSettings.minSize;
+            maxWaitQueueSize = connectionPoolSettings.maxWaitQueueSize;
+            maxWaitTimeMS = connectionPoolSettings.maxWaitTimeMS;
+            maxConnectionLifeTimeMS = connectionPoolSettings.maxConnectionLifeTimeMS;
+            maxConnectionIdleTimeMS = connectionPoolSettings.maxConnectionIdleTimeMS;
+            maintenanceInitialDelayMS = connectionPoolSettings.maintenanceInitialDelayMS;
+            maintenanceFrequencyMS = connectionPoolSettings.maintenanceFrequencyMS;
+            return this;
+        }
 
         /**
          * <p>The maximum number of connections allowed. Those connections will be kept in the pool when idle. Once the pool is exhausted,
@@ -172,6 +216,18 @@ public class ConnectionPoolSettings {
         }
 
         /**
+         * Adds the given connection pool listener.
+         *
+         * @param connectionPoolListener the non-null connection pool listener
+         * @return this
+         * @since 3.5
+         */
+        public Builder addConnectionPoolListener(final ConnectionPoolListener connectionPoolListener) {
+            connectionPoolListeners.add(notNull("connectionPoolListener", connectionPoolListener));
+            return this;
+        }
+
+        /**
          * Creates a new ConnectionPoolSettings object with the settings initialised on this builder.
          *
          * @return a new ConnectionPoolSettings object
@@ -181,30 +237,42 @@ public class ConnectionPoolSettings {
         }
 
         /**
-         * Takes connection pool settings from the given connection string and applies them to this builder.
+         * Takes the settings from the given {@code ConnectionString} and applies them to the builder
          *
-         * @param connectionString a URL with details of how to connect to MongoDB
+         * @param connectionString the connection string containing details of how to connect to MongoDB
          * @return this
          */
         public Builder applyConnectionString(final ConnectionString connectionString) {
-            if (connectionString.getMaxConnectionPoolSize() != null) {
-                maxSize(connectionString.getMaxConnectionPoolSize());
+            Integer maxConnectionPoolSize = connectionString.getMaxConnectionPoolSize();
+            if (maxConnectionPoolSize != null) {
+                maxSize(maxConnectionPoolSize);
             }
-            if (connectionString.getMinConnectionPoolSize() != null) {
-                minSize(connectionString.getMinConnectionPoolSize());
+
+            Integer minConnectionPoolSize = connectionString.getMinConnectionPoolSize();
+            if (minConnectionPoolSize != null) {
+                minSize(minConnectionPoolSize);
             }
-            if (connectionString.getMaxWaitTime() != null) {
-                maxWaitTime(connectionString.getMaxWaitTime(), MILLISECONDS);
+
+            Integer maxWaitTime = connectionString.getMaxWaitTime();
+            if (maxWaitTime != null) {
+                maxWaitTime(maxWaitTime, MILLISECONDS);
             }
-            if (connectionString.getMaxConnectionIdleTime() != null) {
-                maxConnectionIdleTime(connectionString.getMaxConnectionIdleTime(), MILLISECONDS);
+
+            Integer maxConnectionIdleTime = connectionString.getMaxConnectionIdleTime();
+            if (maxConnectionIdleTime != null) {
+                maxConnectionIdleTime(maxConnectionIdleTime, MILLISECONDS);
             }
-            if (connectionString.getMaxConnectionLifeTime() != null) {
-                maxConnectionLifeTime(connectionString.getMaxConnectionLifeTime(), MILLISECONDS);
+
+            Integer maxConnectionLifeTime = connectionString.getMaxConnectionLifeTime();
+            if (maxConnectionLifeTime != null) {
+                maxConnectionLifeTime(maxConnectionLifeTime, MILLISECONDS);
             }
-            if (connectionString.getThreadsAllowedToBlockForConnectionMultiplier() != null) {
-                maxWaitQueueSize(connectionString.getThreadsAllowedToBlockForConnectionMultiplier() * maxSize);
+
+            Integer threadsAllowedToBlockForConnectionMultiplier = connectionString.getThreadsAllowedToBlockForConnectionMultiplier();
+            if (threadsAllowedToBlockForConnectionMultiplier != null) {
+                maxWaitQueueSize(threadsAllowedToBlockForConnectionMultiplier * maxSize);
             }
+
             return this;
         }
     }
@@ -299,6 +367,16 @@ public class ConnectionPoolSettings {
         return timeUnit.convert(maintenanceFrequencyMS, MILLISECONDS);
     }
 
+    /**
+     * Gets the list of added {@code ConnectionPoolListener}. The default is an empty list.
+     *
+     * @return the unmodifiable list of connection pool listeners
+     * @since 3.5
+     */
+    public List<ConnectionPoolListener> getConnectionPoolListeners() {
+        return connectionPoolListeners;
+    }
+
     @Override
     public boolean equals(final Object o) {
         if (this == o) {
@@ -334,6 +412,9 @@ public class ConnectionPoolSettings {
         if (maxWaitTimeMS != that.maxWaitTimeMS) {
             return false;
         }
+        if (!connectionPoolListeners.equals(that.connectionPoolListeners)) {
+            return false;
+        }
 
         return true;
     }
@@ -348,6 +429,7 @@ public class ConnectionPoolSettings {
         result = 31 * result + (int) (maxConnectionIdleTimeMS ^ (maxConnectionIdleTimeMS >>> 32));
         result = 31 * result + (int) (maintenanceInitialDelayMS ^ (maintenanceInitialDelayMS >>> 32));
         result = 31 * result + (int) (maintenanceFrequencyMS ^ (maintenanceFrequencyMS >>> 32));
+        result = 31 * result + connectionPoolListeners.hashCode();
         return result;
     }
 
@@ -362,6 +444,7 @@ public class ConnectionPoolSettings {
                + ", maxConnectionIdleTimeMS=" + maxConnectionIdleTimeMS
                + ", maintenanceInitialDelayMS=" + maintenanceInitialDelayMS
                + ", maintenanceFrequencyMS=" + maintenanceFrequencyMS
+               + ", connectionPoolListeners=" + connectionPoolListeners
                + '}';
     }
 
@@ -383,5 +466,6 @@ public class ConnectionPoolSettings {
         maxConnectionIdleTimeMS = builder.maxConnectionIdleTimeMS;
         maintenanceInitialDelayMS = builder.maintenanceInitialDelayMS;
         maintenanceFrequencyMS = builder.maintenanceFrequencyMS;
+        connectionPoolListeners = unmodifiableList(builder.connectionPoolListeners);
     }
 }

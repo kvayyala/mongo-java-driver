@@ -4,15 +4,14 @@ Release notes are available [here](https://github.com/mongodb/mongo-java-driver/
 
 ## API Documentation:
 
-Javadoc for all major and minor releases is available [here](http://api.mongodb.org/java/).
+Javadoc for all major and minor releases is available [here](http://api.mongodb.com/java/).
 
 ## Support / Feedback
 
 For issues with, questions about, or feedback for the MongoDB Java driver, please look into
 our [support channels](http://www.mongodb.org/about/support). Please
 do not email any of the Java driver developers directly with issues or
-questions - you're more likely to get an answer on the [mongodb-user]
-(http://groups.google.com/group/mongodb-user) list on Google Groups.
+questions - you're more likely to get an answer on the [mongodb-user](http://groups.google.com/group/mongodb-user) list on Google Groups.
 
 At a minimum, please include in your description the exact version of the driver that you are using.  If you are having
 connectivity issues, it's often also useful to paste in the line of code where you construct the MongoClient instance,
@@ -31,8 +30,7 @@ case in our issue management tool, JIRA:
 Bug reports in JIRA for the driver and the Core Server (i.e. SERVER) project are **public**.
 
 If you’ve identified a security vulnerability in a driver or any other
-MongoDB project, please report it according to the [instructions here]
-(http://docs.mongodb.org/manual/tutorial/create-a-vulnerability-report).
+MongoDB project, please report it according to the [instructions here](http://docs.mongodb.org/manual/tutorial/create-a-vulnerability-report).
 
 ## Versioning
 
@@ -43,9 +41,9 @@ called out in the release notes.
 Minor 3.x increments (such as 3.1, 3.2, etc) will occur when non-trivial new functionality is added or significant enhancements or bug
 fixes occur that may have behavioral changes that may affect some edge cases (such as dependence on behavior resulting from a bug). An
 example of an enhancement is a method or class added to support new functionality added to the MongoDB server.   Minor releases will
-almost always be binary compatible with prior minor releases from the same major release branch, exept as noted below.
+almost always be binary compatible with prior minor releases from the same major release branch, except as noted below.
 
-Patch 3.x.y increments (such as 3.0.0 -> 3.0.1, 3.1.1 -> 3.1.2, etc) will occur for bug fixes only and will always be binary compitible
+Patch 3.x.y increments (such as 3.0.0 -> 3.0.1, 3.1.1 -> 3.1.2, etc) will occur for bug fixes only and will always be binary compatible
 with prior patch releases of the same minor release branch.
 
 #### @Beta
@@ -106,7 +104,7 @@ For binaries containing the asynchronous API, see the [driver-async README](driv
 
 ## Build
 
-To build the driver:
+Java 9+ is required to build and compile the source. To build and test the driver:
 
 ```
 $ git clone https://github.com/mongodb/mongo-java-driver.git
@@ -114,9 +112,33 @@ $ cd mongo-java-driver
 $ ./gradlew check
 ```
 
+The test suite requires mongod to be running with [`enableTestCommands`](http://docs.mongodb.org/manual/reference/parameters/#param.enableTestCommands), which may be set with the `--setParameter enableTestCommands=1`
+command-line parameter:
+```
+$ mongod --dbpath ./data/db --logpath ./data/mongod.log --port 27017 --logappend --fork --setParameter enableTestCommands=1
+```
+
+If you encounter `"Too many open files"` errors when running the tests then you will need to increase 
+the number of available file descriptors prior to starting mongod as described in [https://docs.mongodb.com/manual/reference/ulimit/](https://docs.mongodb.com/manual/reference/ulimit/)
+
+## IntelliJ IDEA
+
+A couple of manual configuration steps are required to run the code in IntelliJ:
+
+- Java 9+ is required to build and compile the source.
+
+- **Error:** `java: cannot find symbol: class SNIHostName location: package javax.net.ssl`<br>
+ **Fix:** Settings > Build, Execution, Deployment > Compiler > Java Compiler - untick "Use '--release' option for cross-compilation (Java 9 and later)"
+
+- **Error:** `java: package com.mongodb.internal.build does not exist`<br>
+ **Fixes:** Any of the following: <br>
+ - Run the `compileBuildConfig` task: eg: `./gradlew compileBuildConfig` or via Gradle > driver-core > Tasks > other > compileBuildConfig
+ - Set `compileBuildConfig` to execute Before Build. via Gradle > Tasks > other > right click compileBuildConfig - click on "Execute Before Build" 
+ - Delegate all build actions to Gradle: Settings > Build, Execution, Deployment > Build Tools > Gradle > Runner - tick "Delegate IDE build/run actions to gradle"
+
 ### Build status:
 
-[![Build Status](https://travis-ci.org/mongodb/mongo-java-driver.svg?branch=master)](https://travis-ci.org/mongodb/mongo-java-driver) | [![Build Status](https://jenkins.10gen.com/job/mongo-java-driver/badge/icon)](https://jenkins.10gen.com/job/mongo-java-driver/)
+[![Build Status](https://travis-ci.org/mongodb/mongo-java-driver.svg?branch=master)](https://travis-ci.org/mongodb/mongo-java-driver)
 
 ## Maintainers
 
@@ -137,6 +159,5 @@ YourKit is supporting this open source project with its [YourKit Java Profiler](
 
 JetBrains is supporting this open source project with:
 
-[![Intellij IDEA](http://www.jetbrains.com/img/logos/logo_intellij_idea.png)]
-(http://www.jetbrains.com/idea/)
+[![Intellij IDEA](http://www.jetbrains.com/img/logos/logo_intellij_idea.png)](http://www.jetbrains.com/idea/)
 

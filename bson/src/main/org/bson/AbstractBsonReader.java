@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,8 @@
 
 package org.bson;
 
+import org.bson.types.Decimal128;
 import org.bson.types.ObjectId;
-
-import java.io.Closeable;
 
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
@@ -28,7 +27,7 @@ import static java.util.Arrays.asList;
  *
  * @since 3.0
  */
-public abstract class AbstractBsonReader implements Closeable, BsonReader {
+public abstract class AbstractBsonReader implements BsonReader {
     private State state;
     private Context context;
     private BsonType currentBsonType;
@@ -120,6 +119,14 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
     protected abstract byte doPeekBinarySubType();
 
     /**
+     * Handles the logic to peek at the binary size.
+     *
+     * @return the binary size
+     * @since 3.4
+     */
+    protected abstract int doPeekBinarySize();
+
+    /**
      * Handles the logic to read booleans
      *
      * @return the boolean value
@@ -163,6 +170,15 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
      * @return the long value
      */
     protected abstract long doReadInt64();
+
+
+    /**
+     * Handles the logic to read Decimal128
+     *
+     * @return the Decimal128 value
+     * @since 3.4
+     */
+    protected abstract Decimal128 doReadDecimal128();
 
     /**
      * Handles the logic to read Javascript functions
@@ -274,6 +290,12 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
     }
 
     @Override
+    public int peekBinarySize() {
+        checkPreconditions("readBinaryData", BsonType.BINARY);
+        return doPeekBinarySize();
+    }
+
+    @Override
     public boolean readBoolean() {
         checkPreconditions("readBoolean", BsonType.BOOLEAN);
         setState(getNextState());
@@ -351,6 +373,13 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
         checkPreconditions("readInt64", BsonType.INT64);
         setState(getNextState());
         return doReadInt64();
+    }
+
+    @Override
+    public Decimal128 readDecimal128() {
+        checkPreconditions("readDecimal", BsonType.DECIMAL128);
+        setState(getNextState());
+        return doReadDecimal128();
     }
 
     @Override
@@ -511,6 +540,12 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
     public long readInt64(final String name) {
         verifyName(name);
         return readInt64();
+    }
+
+    @Override
+    public Decimal128 readDecimal128(final String name) {
+        verifyName(name);
+        return readDecimal128();
     }
 
     @Override
@@ -736,12 +771,13 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
                 throw new BSONException(format("Unexpected ContextType %s.", getContext().getContextType()));
         }
     }
-    protected class Mark {
-        private State state;
-        private Context parentContext;
-        private BsonContextType contextType;
-        private BsonType currentBsonType;
-        private String currentName;
+
+    protected class Mark implements BsonReaderMark {
+        private final State state;
+        private final Context parentContext;
+        private final BsonContextType contextType;
+        private final BsonType currentBsonType;
+        private final String currentName;
 
         protected Context getParentContext() {
             return parentContext;
@@ -759,7 +795,7 @@ public abstract class AbstractBsonReader implements Closeable, BsonReader {
             currentName = AbstractBsonReader.this.currentName;
         }
 
-        protected void reset() {
+        public void reset() {
             AbstractBsonReader.this.state = state;
             AbstractBsonReader.this.currentBsonType = currentBsonType;
             AbstractBsonReader.this.currentName = currentName;

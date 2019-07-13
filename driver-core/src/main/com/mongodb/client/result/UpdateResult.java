@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@
 
 package com.mongodb.client.result;
 
+import com.mongodb.lang.Nullable;
 import org.bson.BsonValue;
 
 /**
  * The result of an update operation.  If the update was unacknowledged, then {@code wasAcknowledged} will return false and all other
- * methods with throw {@code UnsupportedOperationException}.
+ * methods will throw {@code UnsupportedOperationException}.
  *
  * @see com.mongodb.WriteConcern#UNACKNOWLEDGED
  * @since 3.0
@@ -44,10 +45,12 @@ public abstract class UpdateResult {
     /**
      * Gets a value indicating whether the modified count is available.
      * <p>
-     * The modified count is only available when all servers have been upgraded to 2.6 or above.
+     * This method now always returns true, as modified count is available since MongoDB 2.6.
      * </p>
      * @return true if the modified count is available
+     * @deprecated no longer needed since all supported server versions support modified count
      */
+    @Deprecated
     public abstract boolean isModifiedCountAvailable();
 
     /**
@@ -62,6 +65,7 @@ public abstract class UpdateResult {
      *
      * @return if the replace resulted in an inserted document, the _id of the inserted document, otherwise null
      */
+    @Nullable
     public abstract BsonValue getUpsertedId();
 
     /**
@@ -72,7 +76,8 @@ public abstract class UpdateResult {
      * @param upsertedId    if the replace resulted in an inserted document, the id of the inserted document
      * @return an acknowledged UpdateResult
      */
-    public static UpdateResult acknowledged(final long matchedCount, final Long modifiedCount, final BsonValue upsertedId) {
+    public static UpdateResult acknowledged(final long matchedCount, @Nullable final Long modifiedCount,
+                                            @Nullable final BsonValue upsertedId) {
         return new AcknowledgedUpdateResult(matchedCount, modifiedCount, upsertedId);
     }
 
@@ -90,7 +95,7 @@ public abstract class UpdateResult {
         private final Long modifiedCount;
         private final BsonValue upsertedId;
 
-        public AcknowledgedUpdateResult(final long matchedCount, final Long modifiedCount, final BsonValue upsertedId) {
+        AcknowledgedUpdateResult(final long matchedCount, final Long modifiedCount, @Nullable final BsonValue upsertedId) {
             this.matchedCount = matchedCount;
             this.modifiedCount = modifiedCount;
             this.upsertedId = upsertedId;
@@ -107,20 +112,18 @@ public abstract class UpdateResult {
         }
 
         @Override
+        @Deprecated
         public boolean isModifiedCountAvailable() {
-            return modifiedCount != null;
+            return true;
         }
 
         @Override
         public long getModifiedCount() {
-            if (modifiedCount == null) {
-                throw new UnsupportedOperationException("Modified count is only available when connected to MongoDB 2.6 servers or "
-                                                        + "above.");
-            }
             return modifiedCount;
         }
 
         @Override
+        @Nullable
         public BsonValue getUpsertedId() {
             return upsertedId;
         }
@@ -179,6 +182,7 @@ public abstract class UpdateResult {
         }
 
         @Override
+        @Deprecated
         public boolean isModifiedCountAvailable() {
             return false;
         }
@@ -189,6 +193,7 @@ public abstract class UpdateResult {
         }
 
         @Override
+        @Nullable
         public BsonValue getUpsertedId() {
            throw getUnacknowledgedWriteException();
         }

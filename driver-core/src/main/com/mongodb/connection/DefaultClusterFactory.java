@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,21 @@
 
 package com.mongodb.connection;
 
+import com.mongodb.MongoCompressor;
 import com.mongodb.MongoCredential;
+import com.mongodb.MongoDriverInformation;
 import com.mongodb.event.ClusterListener;
-import com.mongodb.event.ConnectionListener;
+import com.mongodb.event.CommandListener;
 import com.mongodb.event.ConnectionPoolListener;
+import com.mongodb.internal.connection.ClusterableServerFactory;
+import com.mongodb.internal.connection.DefaultClusterableServerFactory;
+import com.mongodb.internal.connection.DefaultDnsSrvRecordMonitorFactory;
+import com.mongodb.internal.connection.DnsMultiServerCluster;
+import com.mongodb.internal.connection.DnsSrvRecordMonitorFactory;
+import com.mongodb.internal.connection.MultiServerCluster;
+import com.mongodb.internal.connection.SingleServerCluster;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,6 +38,7 @@ import java.util.List;
  *
  * @since 3.0
  */
+@Deprecated
 public final class DefaultClusterFactory implements ClusterFactory {
 
     @Override
@@ -35,30 +46,167 @@ public final class DefaultClusterFactory implements ClusterFactory {
                           final ConnectionPoolSettings connectionPoolSettings, final StreamFactory streamFactory,
                           final StreamFactory heartbeatStreamFactory,
                           final List<MongoCredential> credentialList,
-                          final ClusterListener clusterListener, final ConnectionPoolListener connectionPoolListener,
-                          final ConnectionListener connectionListener) {
-        ClusterId clusterId = new ClusterId(settings.getDescription());
-        ClusterableServerFactory serverFactory = new DefaultClusterableServerFactory(clusterId,
-                                                                                     settings,
-                                                                                     serverSettings,
-                                                                                     connectionPoolSettings,
-                                                                                     streamFactory,
-                                                                                     heartbeatStreamFactory,
-                                                                                     credentialList,
-                                                                                     connectionListener != null ? connectionListener
-                                                                                                             : new NoOpConnectionListener(),
-                                                                                     connectionPoolListener != null
-                                                                                     ? connectionPoolListener
-                                                                                     : new NoOpConnectionPoolListener());
+                          final ClusterListener clusterListener,
+                          final ConnectionPoolListener connectionPoolListener,
+                          final com.mongodb.event.ConnectionListener connectionListener) {
 
-        if (settings.getMode() == ClusterConnectionMode.SINGLE) {
-            return new SingleServerCluster(clusterId, settings, serverFactory,
-                                           clusterListener != null ? clusterListener : new NoOpClusterListener());
-        } else if (settings.getMode() == ClusterConnectionMode.MULTIPLE) {
-            return new MultiServerCluster(clusterId, settings, serverFactory,
-                                          clusterListener != null ? clusterListener : new NoOpClusterListener());
+        return createCluster(getClusterSettings(settings, clusterListener), serverSettings,
+                getConnectionPoolSettings(connectionPoolSettings, connectionPoolListener), streamFactory,
+                heartbeatStreamFactory, credentialList, null, null, null,
+                Collections.<MongoCompressor>emptyList());
+    }
+
+    /**
+     * Creates a cluster with the given settings.  The cluster mode will be based on the mode from the settings.
+     *
+     * @param settings               the cluster settings
+     * @param serverSettings         the server settings
+     * @param connectionPoolSettings the connection pool settings
+     * @param streamFactory          the stream factory
+     * @param heartbeatStreamFactory the heartbeat stream factory
+     * @param credentialList         the credential list
+     * @param clusterListener        an optional listener for cluster-related events
+     * @param connectionPoolListener an optional listener for connection pool-related events
+     * @param connectionListener     an optional listener for connection-related events
+     * @param commandListener        an optional listener for command-related events
+     * @return the cluster
+     *
+     * @since 3.1
+     * @deprecated use {@link #createCluster(ClusterSettings, ServerSettings, ConnectionPoolSettings, StreamFactory, StreamFactory,
+     * List, CommandListener, String, MongoDriverInformation, List)} instead
+     */
+    @Deprecated
+    public Cluster create(final ClusterSettings settings, final ServerSettings serverSettings,
+                          final ConnectionPoolSettings connectionPoolSettings, final StreamFactory streamFactory,
+                          final StreamFactory heartbeatStreamFactory,
+                          final List<MongoCredential> credentialList,
+                          final ClusterListener clusterListener,
+                          final ConnectionPoolListener connectionPoolListener,
+                          final com.mongodb.event.ConnectionListener connectionListener,
+                          final CommandListener commandListener) {
+        return createCluster(getClusterSettings(settings, clusterListener), serverSettings,
+                getConnectionPoolSettings(connectionPoolSettings, connectionPoolListener), streamFactory, heartbeatStreamFactory,
+                credentialList, commandListener, null, null, Collections.<MongoCompressor>emptyList());
+    }
+
+    /**
+     * Creates a cluster with the given settings.  The cluster mode will be based on the mode from the settings.
+     *
+     * @param settings               the cluster settings
+     * @param serverSettings         the server settings
+     * @param connectionPoolSettings the connection pool settings
+     * @param streamFactory          the stream factory
+     * @param heartbeatStreamFactory the heartbeat stream factory
+     * @param credentialList         the credential list
+     * @param clusterListener        an optional listener for cluster-related events
+     * @param connectionPoolListener an optional listener for connection pool-related events
+     * @param connectionListener     an optional listener for connection-related events
+     * @param commandListener        an optional listener for command-related events
+     * @param applicationName        an optional application name to associate with connections to the servers in this cluster
+     * @param mongoDriverInformation the optional driver information associate with connections to the servers in this cluster
+     * @return the cluster
+     *
+     * @since 3.4
+     * @deprecated use {@link #createCluster(ClusterSettings, ServerSettings, ConnectionPoolSettings, StreamFactory, StreamFactory,
+     * List, CommandListener, String, MongoDriverInformation, List)} instead
+     */
+    @Deprecated
+    public Cluster create(final ClusterSettings settings, final ServerSettings serverSettings,
+                          final ConnectionPoolSettings connectionPoolSettings, final StreamFactory streamFactory,
+                          final StreamFactory heartbeatStreamFactory,
+                          final List<MongoCredential> credentialList,
+                          final ClusterListener clusterListener,
+                          final ConnectionPoolListener connectionPoolListener,
+                          final com.mongodb.event.ConnectionListener connectionListener,
+                          final CommandListener commandListener,
+                          final String applicationName,
+                          final MongoDriverInformation mongoDriverInformation) {
+        return createCluster(getClusterSettings(settings, clusterListener), serverSettings,
+                getConnectionPoolSettings(connectionPoolSettings, connectionPoolListener), streamFactory, heartbeatStreamFactory,
+                credentialList, commandListener, applicationName, mongoDriverInformation, Collections.<MongoCompressor>emptyList());
+    }
+
+    /**
+     * Creates a cluster with the given settings.  The cluster mode will be based on the mode from the settings.
+     *
+     * @param clusterSettings        the cluster settings
+     * @param serverSettings         the server settings
+     * @param connectionPoolSettings the connection pool settings
+     * @param streamFactory          the stream factory
+     * @param heartbeatStreamFactory the heartbeat stream factory
+     * @param credentialList         the credential list
+     * @param commandListener        an optional listener for command-related events
+     * @param applicationName        an optional application name to associate with connections to the servers in this cluster
+     * @param mongoDriverInformation the optional driver information associate with connections to the servers in this cluster
+     * @return the cluster
+     *
+     * @since 3.5
+     * @deprecated use {@link #createCluster(ClusterSettings, ServerSettings, ConnectionPoolSettings, StreamFactory, StreamFactory,
+     * List, CommandListener, String, MongoDriverInformation, List)} instead
+
+     */
+    @Deprecated
+    public Cluster createCluster(final ClusterSettings clusterSettings, final ServerSettings serverSettings,
+                                 final ConnectionPoolSettings connectionPoolSettings, final StreamFactory streamFactory,
+                                 final StreamFactory heartbeatStreamFactory, final List<MongoCredential> credentialList,
+                                 final CommandListener commandListener, final String applicationName,
+                                 final MongoDriverInformation mongoDriverInformation) {
+        return createCluster(clusterSettings, serverSettings, connectionPoolSettings, streamFactory, heartbeatStreamFactory, credentialList,
+                commandListener, applicationName, mongoDriverInformation, Collections.<MongoCompressor>emptyList());
+    }
+
+    /**
+     * Creates a cluster with the given settings.  The cluster mode will be based on the mode from the settings.
+     *
+     * @param clusterSettings        the cluster settings
+     * @param serverSettings         the server settings
+     * @param connectionPoolSettings the connection pool settings
+     * @param streamFactory          the stream factory
+     * @param heartbeatStreamFactory the heartbeat stream factory
+     * @param credentialList         the credential list
+     * @param commandListener        an optional listener for command-related events
+     * @param applicationName        an optional application name to associate with connections to the servers in this cluster
+     * @param mongoDriverInformation the optional driver information associate with connections to the servers in this cluster
+     * @param compressorList         the list of compressors to request, in priority order
+     * @return the cluster
+     *
+     * @since 3.6
+     */
+    public Cluster createCluster(final ClusterSettings clusterSettings, final ServerSettings serverSettings,
+                                 final ConnectionPoolSettings connectionPoolSettings, final StreamFactory streamFactory,
+                                 final StreamFactory heartbeatStreamFactory, final List<MongoCredential> credentialList,
+                                 final CommandListener commandListener, final String applicationName,
+                                 final MongoDriverInformation mongoDriverInformation,
+                                 final List<MongoCompressor> compressorList) {
+
+        ClusterId clusterId = new ClusterId(clusterSettings.getDescription());
+
+
+        ClusterableServerFactory serverFactory = new DefaultClusterableServerFactory(clusterId, clusterSettings, serverSettings,
+                connectionPoolSettings, streamFactory, heartbeatStreamFactory, credentialList, commandListener, applicationName,
+                mongoDriverInformation != null ? mongoDriverInformation : MongoDriverInformation.builder().build(), compressorList);
+
+        DnsSrvRecordMonitorFactory dnsSrvRecordMonitorFactory = new DefaultDnsSrvRecordMonitorFactory(clusterId, serverSettings);
+
+        if (clusterSettings.getMode() == ClusterConnectionMode.SINGLE) {
+            return new SingleServerCluster(clusterId, clusterSettings, serverFactory);
+        } else if (clusterSettings.getMode() == ClusterConnectionMode.MULTIPLE) {
+            if (clusterSettings.getSrvHost() == null) {
+                return new MultiServerCluster(clusterId, clusterSettings, serverFactory);
+            } else {
+                return new DnsMultiServerCluster(clusterId, clusterSettings, serverFactory, dnsSrvRecordMonitorFactory);
+            }
         } else {
-            throw new UnsupportedOperationException("Unsupported cluster mode: " + settings.getMode());
+            throw new UnsupportedOperationException("Unsupported cluster mode: " + clusterSettings.getMode());
         }
+    }
+
+    private ClusterSettings getClusterSettings(final ClusterSettings settings, final ClusterListener clusterListener) {
+        return ClusterSettings.builder(settings).addClusterListener(clusterListener).build();
+    }
+
+    private ConnectionPoolSettings getConnectionPoolSettings(final ConnectionPoolSettings connPoolSettings,
+                                                             final ConnectionPoolListener connPoolListener) {
+        return ConnectionPoolSettings.builder(connPoolSettings).addConnectionPoolListener(connPoolListener).build();
     }
 }

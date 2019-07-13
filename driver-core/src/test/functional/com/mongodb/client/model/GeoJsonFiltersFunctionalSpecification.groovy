@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,9 +22,7 @@ import com.mongodb.client.model.geojson.Polygon
 import com.mongodb.client.model.geojson.Position
 import org.bson.Document
 import org.bson.conversions.Bson
-import spock.lang.IgnoreIf
 
-import static com.mongodb.ClusterFixture.serverVersionAtLeast
 import static com.mongodb.client.model.Filters.geoIntersects
 import static com.mongodb.client.model.Filters.geoWithin
 import static com.mongodb.client.model.Filters.near
@@ -47,7 +47,6 @@ class GeoJsonFiltersFunctionalSpecification extends OperationFunctionalSpecifica
         getCollectionHelper().find(filter, new Document('_id', 1)) // sort by _id
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$geoWithin'() {
         given:
         def polygon = new Polygon([new Position(0d, 0d), new Position(4d, 0d), new Position(4d, 4d), new Position(0d, 4d),
@@ -57,7 +56,6 @@ class GeoJsonFiltersFunctionalSpecification extends OperationFunctionalSpecifica
         find(geoWithin('geo', polygon)) == [firstPoint, secondPoint, thirdPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$geoIntersects'() {
         given:
         def polygon = new Polygon([new Position(0d, 0d), new Position(4d, 0d), new Position(4d, 4d), new Position(0d, 4d),
@@ -67,13 +65,11 @@ class GeoJsonFiltersFunctionalSpecification extends OperationFunctionalSpecifica
         find(geoIntersects('geo', polygon)) == [firstPoint, secondPoint, thirdPoint, firstPolygon]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$near'() {
         expect:
         find(near('geo', new Point(new Position(1.01d, 1.01d)), 10000d, null)) == [firstPoint]
     }
 
-    @IgnoreIf({ !serverVersionAtLeast([2, 4, 0]) })
     def '$nearSphere'() {
         expect:
         find(nearSphere('geo', new Point(new Position(1.01d, 1.01d)), 10000d, null)) == [firstPoint]

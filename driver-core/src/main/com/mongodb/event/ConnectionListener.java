@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,12 @@ import java.util.EventListener;
 
 /**
  * A listener for connection-related events.
+ *
+ * @deprecated - No longer used
  */
 @Beta
+@Deprecated
+@SuppressWarnings("deprecation")
 public interface ConnectionListener extends EventListener {
 
     /**
@@ -31,14 +35,14 @@ public interface ConnectionListener extends EventListener {
      *
      * @param event the event
      */
-    void connectionOpened(ConnectionEvent event);
+    void connectionOpened(ConnectionOpenedEvent event);
 
     /**
      * Publish a connection message closed event.
      *
      * @param event the event
      */
-    void connectionClosed(ConnectionEvent event);
+    void connectionClosed(ConnectionClosedEvent event);
 
     /**
      * Publish a connection messages sent event.

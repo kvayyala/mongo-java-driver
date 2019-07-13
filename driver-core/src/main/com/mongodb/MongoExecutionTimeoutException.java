@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package com.mongodb;
 
 /**
- * Exception indicating that the execution of the current operation timed outas a result of the maximum operation time being exceeded.
+ * Exception indicating that the execution of the current operation timed out as a result of the maximum operation time being exceeded.
  *
  * @since 2.12
  */

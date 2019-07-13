@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,18 @@
 
 package com.mongodb.binding;
 
+import com.mongodb.ReadConcern;
 import com.mongodb.ReadPreference;
 import com.mongodb.async.SingleResultCallback;
 import com.mongodb.connection.AsyncConnection;
 import com.mongodb.connection.Cluster;
 import com.mongodb.connection.Server;
 import com.mongodb.connection.ServerDescription;
-import com.mongodb.selector.PrimaryServerSelector;
+import com.mongodb.internal.connection.ReadConcernAwareNoOpSessionContext;
 import com.mongodb.selector.ReadPreferenceServerSelector;
 import com.mongodb.selector.ServerSelector;
+import com.mongodb.selector.WritableServerSelector;
+import com.mongodb.session.SessionContext;
 
 import static com.mongodb.assertions.Assertions.notNull;
 
@@ -34,19 +37,36 @@ import static com.mongodb.assertions.Assertions.notNull;
  *
  * @since 3.0
  */
+@Deprecated
 public class AsyncClusterBinding extends AbstractReferenceCounted implements AsyncReadWriteBinding {
     private final Cluster cluster;
     private final ReadPreference readPreference;
+    private final ReadConcern readConcern;
 
     /**
      * Creates an instance.
      *
      * @param cluster        a non-null Cluster which will be used to select a server to bind to
      * @param readPreference a non-null ReadPreference for read operations
+     * @deprecated Prefer {@link #AsyncClusterBinding(Cluster, ReadPreference, ReadConcern)}
      */
+    @Deprecated
     public AsyncClusterBinding(final Cluster cluster, final ReadPreference readPreference) {
+        this(cluster, readPreference, ReadConcern.DEFAULT);
+    }
+
+    /**
+     * Creates an instance.
+     *
+     * @param cluster        a non-null Cluster which will be used to select a server to bind to
+     * @param readPreference a non-null ReadPreference for read operations
+     * @param readConcern    a non-null read concern
+     * @since 3.8
+     */
+    public AsyncClusterBinding(final Cluster cluster, final ReadPreference readPreference, final ReadConcern readConcern) {
         this.cluster = notNull("cluster", cluster);
         this.readPreference = notNull("readPreference", readPreference);
+        this.readConcern = (notNull("readConcern", readConcern));
     }
 
     @Override
@@ -55,9 +75,23 @@ public class AsyncClusterBinding extends AbstractReferenceCounted implements Asy
         return this;
     }
 
+    /**
+     * Return the cluster.
+     *
+     * @return the cluster
+     */
+    public Cluster getCluster() {
+        return cluster;
+    }
+
     @Override
     public ReadPreference getReadPreference() {
         return readPreference;
+    }
+
+    @Override
+    public SessionContext getSessionContext() {
+        return new ReadConcernAwareNoOpSessionContext(readConcern);
     }
 
     @Override
@@ -67,7 +101,7 @@ public class AsyncClusterBinding extends AbstractReferenceCounted implements Asy
 
     @Override
     public void getWriteConnectionSource(final SingleResultCallback<AsyncConnectionSource> callback) {
-        getAsyncClusterBindingConnectionSource(new PrimaryServerSelector(), callback);
+        getAsyncClusterBindingConnectionSource(new WritableServerSelector(), callback);
     }
 
     private void getAsyncClusterBindingConnectionSource(final ServerSelector serverSelector,
@@ -95,6 +129,11 @@ public class AsyncClusterBinding extends AbstractReferenceCounted implements Asy
         @Override
         public ServerDescription getServerDescription() {
             return server.getDescription();
+        }
+
+        @Override
+        public SessionContext getSessionContext() {
+            return new ReadConcernAwareNoOpSessionContext(readConcern);
         }
 
         @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,12 +19,15 @@ package com.mongodb.operation;
 import com.mongodb.async.SingleResultCallback;
 import com.mongodb.binding.AsyncReadBinding;
 import com.mongodb.binding.ReadBinding;
+import com.mongodb.connection.ConnectionDescription;
+import com.mongodb.connection.ServerDescription;
 import org.bson.BsonDocument;
 import org.bson.codecs.Decoder;
 
 import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
+import static com.mongodb.operation.CommandOperationHelper.CommandCreator;
+import static com.mongodb.operation.CommandOperationHelper.executeCommand;
+import static com.mongodb.operation.CommandOperationHelper.executeCommandAsync;
 
 /**
  * An operation that executes an arbitrary command that reads from the server.
@@ -32,6 +35,7 @@ import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommand
  * @param <T> the operations result type.
  * @since 3.0
  */
+@Deprecated
 public class CommandReadOperation<T> implements AsyncReadOperation<T>, ReadOperation<T> {
     private final String databaseName;
     private final BsonDocument command;
@@ -52,11 +56,20 @@ public class CommandReadOperation<T> implements AsyncReadOperation<T>, ReadOpera
 
     @Override
     public T execute(final ReadBinding binding) {
-        return executeWrappedCommandProtocol(databaseName, command, decoder, binding);
+        return executeCommand(binding, databaseName, getCommandCreator(), decoder, false);
     }
 
     @Override
     public void executeAsync(final AsyncReadBinding binding, final SingleResultCallback<T> callback) {
-        executeWrappedCommandProtocolAsync(databaseName, command, decoder, binding, callback);
+        executeCommandAsync(binding, databaseName, getCommandCreator(), decoder, false, callback);
+    }
+
+    private CommandCreator getCommandCreator() {
+        return new CommandCreator() {
+            @Override
+            public BsonDocument create(final ServerDescription serverDescription, final ConnectionDescription connectionDescription) {
+                return command;
+            }
+        };
     }
 }

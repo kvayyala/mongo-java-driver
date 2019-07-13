@@ -1,9 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,6 +16,7 @@
 
 package com.mongodb.client.model;
 
+import com.mongodb.lang.Nullable;
 import org.bson.conversions.Bson;
 
 /**
@@ -35,6 +38,7 @@ public class PushOptions {
      * @return the position, which may be null
      * @mongodb.driver.manual reference/operator/update/position/ $position
      */
+    @Nullable
     public Integer getPosition() {
         return position;
     }
@@ -46,7 +50,7 @@ public class PushOptions {
      * @return this
      * @mongodb.driver.manual reference/operator/update/position/ $position
      */
-    public PushOptions position(final Integer position) {
+    public PushOptions position(@Nullable final Integer position) {
         this.position = position;
         return this;
     }
@@ -57,6 +61,7 @@ public class PushOptions {
      * @return the slice value representing the limit on the number of array elements allowed
      * @mongodb.driver.manual reference/operator/update/slice/ $slice
      */
+    @Nullable
     public Integer getSlice() {
         return slice;
     }
@@ -68,7 +73,7 @@ public class PushOptions {
      * @return this
      * @mongodb.driver.manual reference/operator/update/slice/ $slice
      */
-    public PushOptions slice(final Integer slice) {
+    public PushOptions slice(@Nullable final Integer slice) {
         this.slice = slice;
         return this;
     }
@@ -80,6 +85,7 @@ public class PushOptions {
      * @mongodb.driver.manual reference/operator/update/sort/ $sort
      * @mongodb.driver.manual reference/operator/update/sort/#sort-array-elements-that-are-not-documents
      */
+    @Nullable
     public Integer getSort() {
         return sort;
     }
@@ -93,7 +99,7 @@ public class PushOptions {
      * @mongodb.driver.manual reference/operator/update/sort/ $sort
      * @mongodb.driver.manual reference/operator/update/sort/#sort-array-elements-that-are-not-documents
      */
-    public PushOptions sort(final Integer sort) {
+    public PushOptions sort(@Nullable final Integer sort) {
         if (sortDocument != null) {
             throw new IllegalStateException("sort can not be set if sortDocument already is");
         }
@@ -107,6 +113,7 @@ public class PushOptions {
      * @return the sort document
      * @mongodb.driver.manual reference/operator/update/sort/ $sort
      */
+    @Nullable
     public Bson getSortDocument() {
         return sortDocument;
     }
@@ -119,11 +126,53 @@ public class PushOptions {
      * @throws IllegalStateException if sort property is already set
      * @mongodb.driver.manual reference/operator/update/sort/ $sort
      */
-    public PushOptions sortDocument(final Bson sortDocument) {
+    public PushOptions sortDocument(@Nullable final Bson sortDocument) {
         if (sort != null) {
             throw new IllegalStateException("sortDocument can not be set if sort already is");
         }
         this.sortDocument = sortDocument;
         return this;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        PushOptions that = (PushOptions) o;
+
+        if (position != null ? !position.equals(that.position) : that.position != null) {
+            return false;
+        }
+        if (slice != null ? !slice.equals(that.slice) : that.slice != null) {
+            return false;
+        }
+        if (sort != null ? !sort.equals(that.sort) : that.sort != null) {
+            return false;
+        }
+        return sortDocument != null ? sortDocument.equals(that.sortDocument) : that.sortDocument == null;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = position != null ? position.hashCode() : 0;
+        result = 31 * result + (slice != null ? slice.hashCode() : 0);
+        result = 31 * result + (sort != null ? sort.hashCode() : 0);
+        result = 31 * result + (sortDocument != null ? sortDocument.hashCode() : 0);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "Push Options{"
+                       + "position=" + position
+                       + ", slice=" + slice
+                       + ((sort == null) ? "" : ", sort=" + sort)
+                       + ((sortDocument == null) ? "" :  ", sortDocument=" + sortDocument)
+                       + '}';
     }
 }

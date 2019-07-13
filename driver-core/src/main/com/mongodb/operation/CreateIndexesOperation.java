@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import com.mongodb.DuplicateKeyException;
 import com.mongodb.ErrorCategory;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoException;
-import com.mongodb.MongoInternalException;
 import com.mongodb.MongoNamespace;
 import com.mongodb.WriteConcern;
 import com.mongodb.WriteConcernResult;
@@ -28,9 +27,10 @@ import com.mongodb.async.SingleResultCallback;
 import com.mongodb.binding.AsyncWriteBinding;
 import com.mongodb.binding.WriteBinding;
 import com.mongodb.bulk.IndexRequest;
-import com.mongodb.bulk.InsertRequest;
 import com.mongodb.connection.AsyncConnection;
 import com.mongodb.connection.Connection;
+import com.mongodb.connection.ConnectionDescription;
+import com.mongodb.internal.operation.IndexHelper;
 import org.bson.BsonArray;
 import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
@@ -43,17 +43,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static com.mongodb.assertions.Assertions.isTrueArgument;
 import static com.mongodb.assertions.Assertions.notNull;
 import static com.mongodb.internal.async.ErrorHandlingResultCallback.errorHandlingCallback;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
-import static com.mongodb.operation.IndexHelper.generateIndexName;
+import static com.mongodb.operation.CommandOperationHelper.executeCommand;
+import static com.mongodb.operation.CommandOperationHelper.executeCommandAsync;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorWriteTransformer;
+import static com.mongodb.operation.DocumentHelper.putIfNotZero;
+import static com.mongodb.internal.operation.IndexHelper.generateIndexName;
 import static com.mongodb.operation.OperationHelper.AsyncCallableWithConnection;
 import static com.mongodb.operation.OperationHelper.CallableWithConnection;
+import static com.mongodb.operation.OperationHelper.LOGGER;
 import static com.mongodb.operation.OperationHelper.releasingCallback;
-import static com.mongodb.operation.OperationHelper.serverIsAtLeastVersionTwoDotSix;
+import static com.mongodb.operation.OperationHelper.validateIndexRequestCollations;
 import static com.mongodb.operation.OperationHelper.withConnection;
-import static java.util.Arrays.asList;
+import static com.mongodb.internal.operation.WriteConcernHelper.appendWriteConcernToCommand;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorTransformer;
 
 /**
  * An operation that creates one or more indexes.
@@ -63,21 +68,49 @@ import static java.util.Arrays.asList;
  * @mongodb.driver.manual reference/command/createIndexes/ Create indexes
  * @since 3.0
  */
+@Deprecated
 public class CreateIndexesOperation implements AsyncWriteOperation<Void>, WriteOperation<Void> {
     private final MongoNamespace namespace;
     private final List<IndexRequest> requests;
-    private final MongoNamespace systemIndexes;
+    private final WriteConcern writeConcern;
+    private long maxTimeMS;
 
     /**
      * Construct a new instance.
      *
      * @param namespace     the database and collection namespace for the operation.
      * @param requests the index request
+     * @deprecated Prefer {@link #CreateIndexesOperation(MongoNamespace, List, WriteConcern)}
      */
+    @Deprecated
     public CreateIndexesOperation(final MongoNamespace namespace, final List<IndexRequest> requests) {
+        this(namespace, requests, null);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param namespace     the database and collection namespace for the operation.
+     * @param requests the index request
+     * @param writeConcern the write concern
+     *
+     * @since 3.4
+     */
+    public CreateIndexesOperation(final MongoNamespace namespace, final List<IndexRequest> requests, final WriteConcern writeConcern) {
         this.namespace = notNull("namespace", namespace);
-        this.systemIndexes = new MongoNamespace(namespace.getDatabaseName(), "system.indexes");
         this.requests = notNull("indexRequests", requests);
+        this.writeConcern = writeConcern;
+    }
+
+    /**
+     * Gets the write concern.
+     *
+     * @return the write concern, which may be null
+     *
+     * @since 3.4
+     */
+    public WriteConcern getWriteConcern() {
+        return writeConcern;
     }
 
     /**
@@ -106,22 +139,44 @@ public class CreateIndexesOperation implements AsyncWriteOperation<Void>, WriteO
         return indexNames;
     }
 
+    /**
+     * Gets the maximum execution time on the server for this operation.  The default is 0, which places no limit on the execution time.
+     *
+     * @param timeUnit the time unit to return the result in
+     * @return the maximum execution time in the given time unit
+     * @since 3.6
+     */
+    public long getMaxTime(final TimeUnit timeUnit) {
+        notNull("timeUnit", timeUnit);
+        return timeUnit.convert(maxTimeMS, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Sets the maximum execution time on the server for this operation.
+     *
+     * @param maxTime  the max time
+     * @param timeUnit the time unit, which may not be null
+     * @return this
+     * @since 3.6
+     */
+    public CreateIndexesOperation maxTime(final long maxTime, final TimeUnit timeUnit) {
+        notNull("timeUnit", timeUnit);
+        isTrueArgument("maxTime >= 0", maxTime >= 0);
+        this.maxTimeMS = TimeUnit.MILLISECONDS.convert(maxTime, timeUnit);
+        return this;
+    }
+
     @Override
     public Void execute(final WriteBinding binding) {
         return withConnection(binding, new CallableWithConnection<Void>() {
             @Override
             public Void call(final Connection connection) {
-                if (serverIsAtLeastVersionTwoDotSix(connection.getDescription())) {
-                    try {
-                        executeWrappedCommandProtocol(namespace.getDatabaseName(), getCommand(), connection);
-                    } catch (MongoCommandException e) {
-                        throw checkForDuplicateKeyError(e);
-                    }
-                } else {
-                    if (requests.size() > 1) {
-                        throw new MongoInternalException("Creation of multiple indexes simultaneously not supported until MongoDB 2.6");
-                    }
-                    connection.insert(systemIndexes, true, WriteConcern.ACKNOWLEDGED, asList(new InsertRequest(getIndex(requests.get(0)))));
+                try {
+                    validateIndexRequestCollations(connection, requests);
+                    executeCommand(binding, namespace.getDatabaseName(), getCommand(connection.getDescription()),
+                            connection, writeConcernErrorTransformer());
+                } catch (MongoCommandException e) {
+                    throw checkForDuplicateKeyError(e);
                 }
                 return null;
             }
@@ -133,33 +188,28 @@ public class CreateIndexesOperation implements AsyncWriteOperation<Void>, WriteO
         withConnection(binding, new AsyncCallableWithConnection() {
             @Override
             public void call(final AsyncConnection connection, final Throwable t) {
+                SingleResultCallback<Void> errHandlingCallback = errorHandlingCallback(callback, LOGGER);
                 if (t != null) {
-                    errorHandlingCallback(callback).onResult(null, t);
+                    errHandlingCallback.onResult(null, t);
                 } else {
-                    final SingleResultCallback<Void> wrappedCallback = releasingCallback(errorHandlingCallback(callback), connection);
-                    if (serverIsAtLeastVersionTwoDotSix(connection.getDescription())) {
-                        executeWrappedCommandProtocolAsync(namespace.getDatabaseName(), getCommand(), connection,
-                                                           new SingleResultCallback<BsonDocument>() {
-                                                               @Override
-                                                               public void onResult(final BsonDocument result, final Throwable t) {
-                                                                   wrappedCallback.onResult(null, translateException(t));
-                                                               }});
-                    } else {
-                        if (requests.size() > 1) {
-                            wrappedCallback.onResult(null, new MongoInternalException("Creation of multiple indexes simultaneously not "
-                                                                                      + "supported until MongoDB 2.6"));
+                    final SingleResultCallback<Void> wrappedCallback = releasingCallback(errHandlingCallback, connection);
+                    validateIndexRequestCollations(connection, requests, new AsyncCallableWithConnection() {
+                        @Override
+                        public void call(final AsyncConnection connection, final Throwable t) {
+                            if (t != null) {
+                                wrappedCallback.onResult(null, t);
+                            } else {
+                                executeCommandAsync(binding, namespace.getDatabaseName(),
+                                        getCommand(connection.getDescription()), connection, writeConcernErrorWriteTransformer(),
+                                        new SingleResultCallback<Void>() {
+                                            @Override
+                                            public void onResult(final Void result, final Throwable t) {
+                                                wrappedCallback.onResult(null, translateException(t));
+                                            }
+                                        });
+                            }
                         }
-                        else {
-                            connection.insertAsync(systemIndexes, true, WriteConcern.ACKNOWLEDGED,
-                                                   asList(new InsertRequest(getIndex(requests.get(0)))),
-                                                   new SingleResultCallback<WriteConcernResult>() {
-                                                       @Override
-                                                       public void onResult(final WriteConcernResult result, final Throwable t) {
-                                                           wrappedCallback.onResult(null, translateException(t));
-                                                       }
-                                                   });
-                        }
-                    }
+                    });
                 }
             }
         });
@@ -218,16 +268,27 @@ public class CreateIndexesOperation implements AsyncWriteOperation<Void>, WriteO
         if (request.getStorageEngine() != null) {
             index.append("storageEngine", request.getStorageEngine());
         }
+        if (request.getPartialFilterExpression() != null) {
+            index.append("partialFilterExpression", request.getPartialFilterExpression());
+        }
+        if (request.getCollation() != null) {
+            index.append("collation", request.getCollation().asDocument());
+        }
+        if (request.getWildcardProjection() != null) {
+            index.append("wildcardProjection", request.getWildcardProjection());
+        }
         return index;
     }
 
-    private BsonDocument getCommand() {
+    private BsonDocument getCommand(final ConnectionDescription description) {
         BsonDocument command = new BsonDocument("createIndexes", new BsonString(namespace.getCollectionName()));
         List<BsonDocument> values = new ArrayList<BsonDocument>();
         for (IndexRequest request : requests) {
             values.add(getIndex(request));
         }
         command.put("indexes", new BsonArray(values));
+        putIfNotZero(command, "maxTimeMS", maxTimeMS);
+        appendWriteConcernToCommand(writeConcern, command, description);
         return command;
     }
 

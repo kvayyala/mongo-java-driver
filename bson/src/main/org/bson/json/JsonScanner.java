@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ package org.bson.json;
 
 import org.bson.BsonRegularExpression;
 
+import java.io.Reader;
+
 /**
  * Parses the string representation of a JSON object into a set of {@link JsonToken}-derived objects.
  *
@@ -27,36 +29,28 @@ class JsonScanner {
 
     private final JsonBuffer buffer;
 
-    /**
-     * @param newPosition the new position of the cursor position in the buffer
-     */
-    public void setBufferPosition(final int newPosition) {
-        buffer.setPosition(newPosition);
-    }
-
-    /**
-     * @return the current location of the cursor in the buffer
-     */
-    public int getBufferPosition() {
-        return buffer.getPosition();
-    }
-
-    /**
-     * Constructs a a new {@code JSONScanner} that produces values scanned from specified {@code JSONBuffer}.
-     *
-     * @param buffer A buffer to be scanned.
-     */
-    public JsonScanner(final JsonBuffer buffer) {
+    JsonScanner(final JsonBuffer buffer) {
         this.buffer = buffer;
     }
 
-    /**
-     * Constructs a a new {@code JSONScanner} that produces values scanned from the specified {@code String}.
-     *
-     * @param json A string representation of a JSON to be scanned.
-     */
-    public JsonScanner(final String json) {
-        this(new JsonBuffer(json));
+    JsonScanner(final String json) {
+        this(new JsonStringBuffer(json));
+    }
+
+    JsonScanner(final Reader reader) {
+        this(new JsonStreamBuffer(reader));
+    }
+
+    public void reset(final int markPos) {
+        buffer.reset(markPos);
+    }
+
+    public int mark() {
+        return buffer.mark();
+    }
+
+    public void discard(final int markPos) {
+        buffer.discard(markPos);
     }
 
     /**
@@ -102,7 +96,7 @@ class JsonScanner {
                 if (c == '-' || Character.isDigit(c)) {
                     return scanNumber((char) c);
                 } else if (c == '$' || c == '_' || Character.isLetter(c)) {
-                    return scanUnquotedString();
+                    return scanUnquotedString((char) c);
                 } else {
                     int position = buffer.getPosition();
                     buffer.unread(c);
@@ -125,18 +119,19 @@ class JsonScanner {
      */
     private JsonToken scanRegularExpression() {
 
-        int start = buffer.getPosition() - 1;
-        int options = -1;
-
+        StringBuilder patternBuilder = new StringBuilder();
+        StringBuilder optionsBuilder = new StringBuilder();
         RegularExpressionState state = RegularExpressionState.IN_PATTERN;
         while (true) {
             int c = buffer.read();
             switch (state) {
                 case IN_PATTERN:
                     switch (c) {
+                        case -1:
+                            state = RegularExpressionState.INVALID;
+                            break;
                         case '/':
                             state = RegularExpressionState.IN_OPTIONS;
-                            options = buffer.getPosition();
                             break;
                         case '\\':
                             state = RegularExpressionState.IN_ESCAPE_SEQUENCE;
@@ -174,18 +169,28 @@ class JsonScanner {
                     }
                     break;
                 default:
+                    break;
             }
 
             switch (state) {
                 case DONE:
                     buffer.unread(c);
-                    int end = buffer.getPosition();
                     BsonRegularExpression regex
-                        = new BsonRegularExpression(buffer.substring(start + 1, options - 1), buffer.substring(options, end));
+                        = new BsonRegularExpression(patternBuilder.toString(), optionsBuilder.toString());
                     return new JsonToken(JsonTokenType.REGULAR_EXPRESSION, regex);
                 case INVALID:
                     throw new JsonParseException("Invalid JSON regular expression. Position: %d.", buffer.getPosition());
                 default:
+                    switch (state) {
+                        case IN_OPTIONS:
+                            if (c != '/') {
+                                optionsBuilder.append((char) c);
+                            }
+                            break;
+                        default:
+                            patternBuilder.append((char) c);
+                            break;
+                    }
             }
         }
     }
@@ -195,14 +200,16 @@ class JsonScanner {
      *
      * @return The string token.
      */
-    private JsonToken scanUnquotedString() {
-        int start = buffer.getPosition() - 1;
+    private JsonToken scanUnquotedString(final char firstChar) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(firstChar);
         int c = buffer.read();
         while (c == '$' || c == '_' || Character.isLetterOrDigit(c)) {
+            sb.append((char) c);
             c = buffer.read();
         }
         buffer.unread(c);
-        String lexeme = buffer.substring(start, buffer.getPosition());
+        String lexeme = sb.toString();
         return new JsonToken(JsonTokenType.UNQUOTED_STRING, lexeme);
     }
 
@@ -228,8 +235,8 @@ class JsonScanner {
     private JsonToken scanNumber(final char firstChar) {
 
         int c = firstChar;
-
-        int start = buffer.getPosition() - 1;
+        StringBuilder sb = new StringBuilder();
+        sb.append(firstChar);
 
         NumberState state;
 
@@ -404,6 +411,7 @@ class JsonScanner {
                             sawMinusInfinity = false;
                             break;
                         }
+                        sb.append((char) c);
                         c = buffer.read();
                     }
                     if (sawMinusInfinity) {
@@ -436,7 +444,7 @@ class JsonScanner {
                     throw new JsonParseException("Invalid JSON number");
                 case DONE:
                     buffer.unread(c);
-                    String lexeme = buffer.substring(start, buffer.getPosition());
+                    String lexeme = sb.toString();
                     if (type == JsonTokenType.DOUBLE) {
                         return new JsonToken(JsonTokenType.DOUBLE, Double.parseDouble(lexeme));
                     } else {
@@ -448,6 +456,7 @@ class JsonScanner {
                         }
                     }
                 default:
+                    sb.append((char) c);
             }
         }
 

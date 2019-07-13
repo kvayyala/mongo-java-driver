@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,38 +16,43 @@
 
 package com.mongodb.operation;
 
-import com.mongodb.MongoNamespace;
+import com.mongodb.MongoCommandException;
 import com.mongodb.WriteConcern;
-import com.mongodb.WriteConcernResult;
 import com.mongodb.async.SingleResultCallback;
 import com.mongodb.binding.AsyncWriteBinding;
 import com.mongodb.binding.WriteBinding;
-import com.mongodb.bulk.DeleteRequest;
 import com.mongodb.connection.AsyncConnection;
 import com.mongodb.connection.Connection;
+import com.mongodb.connection.ConnectionDescription;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
 
 import static com.mongodb.assertions.Assertions.notNull;
 import static com.mongodb.internal.async.ErrorHandlingResultCallback.errorHandlingCallback;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
+import static com.mongodb.operation.CommandOperationHelper.executeCommand;
+import static com.mongodb.operation.CommandOperationHelper.executeCommandAsync;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorWriteTransformer;
 import static com.mongodb.operation.OperationHelper.AsyncCallableWithConnection;
 import static com.mongodb.operation.OperationHelper.CallableWithConnection;
-import static com.mongodb.operation.OperationHelper.VoidTransformer;
+import static com.mongodb.operation.OperationHelper.LOGGER;
 import static com.mongodb.operation.OperationHelper.releasingCallback;
-import static com.mongodb.operation.OperationHelper.serverIsAtLeastVersionTwoDotSix;
 import static com.mongodb.operation.OperationHelper.withConnection;
-import static java.util.Arrays.asList;
+import static com.mongodb.operation.UserOperationHelper.translateUserCommandException;
+import static com.mongodb.operation.UserOperationHelper.userCommandCallback;
+import static com.mongodb.internal.operation.WriteConcernHelper.appendWriteConcernToCommand;
+import static com.mongodb.operation.CommandOperationHelper.writeConcernErrorTransformer;
 
 /**
  * An operation to remove a user.
  *
  * @since 3.0
+ * @deprecated use {@link CommandWriteOperation} directly or the mongod shell helpers.
  */
+@Deprecated
 public class DropUserOperation implements AsyncWriteOperation<Void>, WriteOperation<Void> {
     private final String databaseName;
     private final String userName;
+    private final WriteConcern writeConcern;
 
     /**
      * Construct a new instance.
@@ -56,8 +61,22 @@ public class DropUserOperation implements AsyncWriteOperation<Void>, WriteOperat
      * @param userName     the name of the user to be dropped.
      */
     public DropUserOperation(final String databaseName, final String userName) {
+        this(databaseName, userName, null);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param databaseName the name of the database for the operation.
+     * @param userName     the name of the user to be dropped.
+     * @param writeConcern the write concern
+     *
+     * @since 3.4
+     */
+    public DropUserOperation(final String databaseName, final String userName, final WriteConcern writeConcern) {
         this.databaseName = notNull("databaseName", databaseName);
         this.userName = notNull("userName", userName);
+        this.writeConcern = writeConcern;
     }
 
     @Override
@@ -65,10 +84,11 @@ public class DropUserOperation implements AsyncWriteOperation<Void>, WriteOperat
         return withConnection(binding, new CallableWithConnection<Void>() {
             @Override
             public Void call(final Connection connection) {
-                if (serverIsAtLeastVersionTwoDotSix(connection.getDescription())) {
-                    executeWrappedCommandProtocol(databaseName, getCommand(), connection);
-                } else {
-                    connection.delete(getNamespace(), true, WriteConcern.ACKNOWLEDGED, asList(getDeleteRequest()));
+                try {
+                    executeCommand(binding, databaseName, getCommand(connection.getDescription()), connection,
+                            writeConcernErrorTransformer());
+                } catch (MongoCommandException e) {
+                    translateUserCommandException(e);
                 }
                 return null;
             }
@@ -80,37 +100,22 @@ public class DropUserOperation implements AsyncWriteOperation<Void>, WriteOperat
         withConnection(binding, new AsyncCallableWithConnection() {
             @Override
             public void call(final AsyncConnection connection, final Throwable t) {
+                SingleResultCallback<Void> errHandlingCallback = errorHandlingCallback(callback, LOGGER);
                 if (t != null) {
-                    errorHandlingCallback(callback).onResult(null, t);
+                    errHandlingCallback.onResult(null, t);
                 } else {
-                    final SingleResultCallback<Void> wrappedCallback = releasingCallback(errorHandlingCallback(callback), connection);
+                    final SingleResultCallback<Void> wrappedCallback = releasingCallback(errHandlingCallback, connection);
+                    executeCommandAsync(binding, databaseName, getCommand(connection.getDescription()), connection,
+                            writeConcernErrorWriteTransformer(), userCommandCallback(wrappedCallback));
 
-                    if (serverIsAtLeastVersionTwoDotSix(connection.getDescription())) {
-                        executeWrappedCommandProtocolAsync(databaseName, getCommand(), connection, new VoidTransformer<BsonDocument>(),
-                                                           wrappedCallback);
-                    } else {
-                        connection.deleteAsync(getNamespace(), true, WriteConcern.ACKNOWLEDGED, asList(getDeleteRequest()),
-                                               new SingleResultCallback<WriteConcernResult>() {
-                                                   @Override
-                                                   public void onResult(final WriteConcernResult result, final Throwable t) {
-                                                       wrappedCallback.onResult(null, t);
-                                                   }
-                                               });
-                    }
                 }
             }
         });
     }
 
-    private MongoNamespace getNamespace() {
-        return new MongoNamespace(databaseName, "system.users");
-    }
-
-    private DeleteRequest getDeleteRequest() {
-        return new DeleteRequest(new BsonDocument("user", new BsonString(userName)));
-    }
-
-    private BsonDocument getCommand() {
-        return new BsonDocument("dropUser", new BsonString(userName));
+    private BsonDocument getCommand(final ConnectionDescription description) {
+        BsonDocument commandDocument = new BsonDocument("dropUser", new BsonString(userName));
+        appendWriteConcernToCommand(writeConcern, commandDocument, description);
+        return commandDocument;
     }
 }

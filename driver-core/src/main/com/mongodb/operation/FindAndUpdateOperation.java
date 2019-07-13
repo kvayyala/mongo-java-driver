@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,27 +17,37 @@
 package com.mongodb.operation;
 
 import com.mongodb.MongoNamespace;
-import com.mongodb.async.SingleResultCallback;
-import com.mongodb.binding.AsyncWriteBinding;
-import com.mongodb.binding.WriteBinding;
+import com.mongodb.WriteConcern;
+import com.mongodb.client.model.Collation;
+import com.mongodb.connection.ConnectionDescription;
+import com.mongodb.connection.ServerDescription;
 import com.mongodb.internal.validator.MappedFieldNameValidator;
 import com.mongodb.internal.validator.NoOpFieldNameValidator;
 import com.mongodb.internal.validator.UpdateFieldNameValidator;
+import com.mongodb.lang.Nullable;
+import com.mongodb.session.SessionContext;
+import org.bson.BsonArray;
+import org.bson.BsonBoolean;
 import org.bson.BsonDocument;
 import org.bson.BsonString;
+import org.bson.BsonValue;
 import org.bson.FieldNameValidator;
 import org.bson.codecs.Decoder;
+import org.bson.conversions.Bson;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.assertions.Assertions.notNull;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocol;
-import static com.mongodb.operation.CommandOperationHelper.executeWrappedCommandProtocolAsync;
+import static com.mongodb.internal.operation.ServerVersionHelper.serverIsAtLeastVersionThreeDotTwo;
+import static com.mongodb.operation.CommandOperationHelper.CommandCreator;
 import static com.mongodb.operation.DocumentHelper.putIfNotNull;
 import static com.mongodb.operation.DocumentHelper.putIfNotZero;
 import static com.mongodb.operation.DocumentHelper.putIfTrue;
+import static com.mongodb.operation.OperationHelper.validateCollation;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -45,47 +55,84 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  *
  * @param <T> the operations result type.
  * @since 3.0
+ * @mongodb.driver.manual reference/command/findAndModify/ findAndModify
  */
-public class FindAndUpdateOperation<T> implements AsyncWriteOperation<T>, WriteOperation<T> {
-    private final MongoNamespace namespace;
-    private final Decoder<T> decoder;
+@Deprecated
+public class FindAndUpdateOperation<T> extends BaseFindAndModifyOperation<T> {
     private final BsonDocument update;
+    private final List<? extends Bson> updatePipeline;
     private BsonDocument filter;
     private BsonDocument projection;
     private BsonDocument sort;
     private long maxTimeMS;
     private boolean returnOriginal = true;
     private boolean upsert;
+    private Boolean bypassDocumentValidation;
+    private Collation collation;
+    private List<BsonDocument> arrayFilters;
 
     /**
      * Construct a new instance.
      *
      * @param namespace the database and collection namespace for the operation.
-     * @param decoder the decoder for the result documents.
-     * @param update the document containing update operators.
+     * @param decoder   the decoder for the result documents.
+     * @param update    the document containing update operators.
+     * @deprecated use {@link #FindAndUpdateOperation(MongoNamespace, WriteConcern, boolean, Decoder, BsonDocument)} instead
      */
+    @Deprecated
     public FindAndUpdateOperation(final MongoNamespace namespace, final Decoder<T> decoder, final BsonDocument update) {
-        this.namespace = notNull("namespace", namespace);
-        this.decoder = notNull("decoder", decoder);
+        this(namespace, WriteConcern.ACKNOWLEDGED, false, decoder, update);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param namespace    the database and collection namespace for the operation.
+     * @param writeConcern the writeConcern for the operation
+     * @param decoder      the decoder for the result documents.
+     * @param update       the document containing update operators.
+     * @since 3.2
+     * @deprecated use {@link #FindAndUpdateOperation(MongoNamespace, WriteConcern, boolean, Decoder, BsonDocument)} instead
+     */
+    @Deprecated
+    public FindAndUpdateOperation(final MongoNamespace namespace, final WriteConcern writeConcern, final Decoder<T> decoder,
+                                  final BsonDocument update) {
+        this(namespace, writeConcern, false, decoder, update);
+    }
+
+    /**
+     * Construct a new instance.
+     *
+     * @param namespace    the database and collection namespace for the operation.
+     * @param writeConcern the writeConcern for the operation
+     * @param retryWrites  if writes should be retried if they fail due to a network error.
+     * @param decoder      the decoder for the result documents.
+     * @param update       the document containing update operators.
+     * @since 3.6
+     */
+    public FindAndUpdateOperation(final MongoNamespace namespace, final WriteConcern writeConcern, final boolean retryWrites,
+                                  final Decoder<T> decoder, final BsonDocument update) {
+        super(namespace, writeConcern, retryWrites, decoder);
         this.update = notNull("decoder", update);
+        this.updatePipeline = null;
     }
 
     /**
-     * Gets the namespace.
+     * Construct a new instance.
      *
-     * @return the namespace
+     * @param namespace    the database and collection namespace for the operation.
+     * @param writeConcern the writeConcern for the operation
+     * @param retryWrites  if writes should be retried if they fail due to a network error.
+     * @param decoder      the decoder for the result documents.
+     * @param update       the pipeline containing update operators.
+     * @since 3.11
+     * @mongodb.server.release 4.2
      */
-    public MongoNamespace getNamespace() {
-        return namespace;
-    }
-
-    /**
-     * Gets the decoder used to decode the result documents.
-     *
-     * @return the decoder
-     */
-    public Decoder<T> getDecoder() {
-        return decoder;
+    public FindAndUpdateOperation(final MongoNamespace namespace, final WriteConcern writeConcern, final boolean retryWrites,
+                                  final Decoder<T> decoder, final List<? extends Bson> update) {
+        super(namespace, writeConcern, retryWrites, decoder);
+        this.updatePipeline = update;
+        this.update = null;
     }
 
     /**
@@ -93,8 +140,21 @@ public class FindAndUpdateOperation<T> implements AsyncWriteOperation<T>, WriteO
      *
      * @return the update document
      */
+    @Nullable
     public BsonDocument getUpdate() {
         return update;
+    }
+
+    /**
+     * Gets the pipeline containing update operators
+     *
+     * @return the update pipeline
+     * @since 3.11
+     * @mongodb.server.release 4.2
+     */
+    @Nullable
+    public List<? extends Bson> getUpdatePipeline() {
+        return updatePipeline;
     }
 
     /**
@@ -140,7 +200,6 @@ public class FindAndUpdateOperation<T> implements AsyncWriteOperation<T>, WriteO
         this.projection = projection;
         return this;
     }
-
 
     /**
      * Gets the maximum execution time on the server for this operation.  The default is 0, which places no limit on the execution time.
@@ -229,36 +288,139 @@ public class FindAndUpdateOperation<T> implements AsyncWriteOperation<T>, WriteO
         return this;
     }
 
-    @Override
-    public T execute(final WriteBinding binding) {
-        return executeWrappedCommandProtocol(namespace.getDatabaseName(), getCommand(), getValidator(),
-                                             CommandResultDocumentCodec.create(decoder, "value"), binding,
-                                             FindAndModifyHelper.<T>transformer());
+    /**
+     * Gets the bypass document level validation flag
+     *
+     * @return the bypass document level validation flag
+     * @since 3.2
+     */
+    public Boolean getBypassDocumentValidation() {
+        return bypassDocumentValidation;
+    }
+
+    /**
+     * Sets the bypass document level validation flag.
+     *
+     * @param bypassDocumentValidation If true, allows the write to opt-out of document level validation.
+     * @return this
+     * @since 3.2
+     * @mongodb.driver.manual reference/command/aggregate/ Aggregation
+     * @mongodb.server.release 3.2
+     */
+    public FindAndUpdateOperation<T> bypassDocumentValidation(final Boolean bypassDocumentValidation) {
+        this.bypassDocumentValidation = bypassDocumentValidation;
+        return this;
+    }
+
+    /**
+     * Returns the collation options
+     *
+     * @return the collation options
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public Collation getCollation() {
+        return collation;
+    }
+
+    /**
+     * Sets the collation options
+     *
+     * <p>A null value represents the server default.</p>
+     * @param collation the collation options to use
+     * @return this
+     * @since 3.4
+     * @mongodb.server.release 3.4
+     */
+    public FindAndUpdateOperation<T> collation(final Collation collation) {
+        this.collation = collation;
+        return this;
+    }
+
+
+    /**
+     * Sets the array filters option
+     *
+     * @param arrayFilters the array filters, which may be null
+     * @return this
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public FindAndUpdateOperation<T> arrayFilters(final List<BsonDocument> arrayFilters) {
+        this.arrayFilters = arrayFilters;
+        return this;
+    }
+
+    /**
+     * Returns the array filters option
+     *
+     * @return the array filters, which may be null
+     * @since 3.6
+     * @mongodb.server.release 3.6
+     */
+    public List<BsonDocument> getArrayFilters() {
+        return arrayFilters;
     }
 
     @Override
-    public void executeAsync(final AsyncWriteBinding binding, final SingleResultCallback<T> callback) {
-        executeWrappedCommandProtocolAsync(namespace.getDatabaseName(), getCommand(), getValidator(),
-                                           CommandResultDocumentCodec.create(decoder, "value"), binding,
-                                           FindAndModifyHelper.<T>transformer(), callback);
+    protected String getDatabaseName() {
+        return getNamespace().getDatabaseName();
     }
 
-    private BsonDocument getCommand() {
-        BsonDocument command = new BsonDocument("findandmodify", new BsonString(namespace.getCollectionName()));
-        putIfNotNull(command, "query", getFilter());
-        putIfNotNull(command, "fields", getProjection());
-        putIfNotNull(command, "sort", getSort());
-        putIfTrue(command, "new", !isReturnOriginal());
-        putIfTrue(command, "upsert", isUpsert());
-        putIfNotZero(command, "maxTimeMS", getMaxTime(MILLISECONDS));
-        command.put("update", getUpdate());
-        return command;
-    }
-
-    private FieldNameValidator getValidator() {
+    @Override
+    protected FieldNameValidator getFieldNameValidator() {
         Map<String, FieldNameValidator> map = new HashMap<String, FieldNameValidator>();
         map.put("update", new UpdateFieldNameValidator());
-
         return new MappedFieldNameValidator(new NoOpFieldNameValidator(), map);
+    }
+
+    @Override
+    protected CommandCreator getCommandCreator(final SessionContext sessionContext) {
+        return new CommandCreator() {
+            @Override
+            public BsonDocument create(final ServerDescription serverDescription, final ConnectionDescription connectionDescription) {
+                return createCommand(sessionContext, serverDescription, connectionDescription);
+            }
+        };
+    }
+
+    private List<BsonValue> toBsonValueList(final List<? extends Bson> bsonList) {
+        if (bsonList == null) {
+            return null;
+        }
+        List<BsonValue> bsonValueList = new ArrayList<BsonValue>(bsonList.size());
+        for (Object cur : bsonList) {
+            bsonValueList.add((BsonValue) cur);
+        }
+        return bsonValueList;
+    }
+
+    private BsonDocument createCommand(final SessionContext sessionContext, final ServerDescription serverDescription,
+                                       final ConnectionDescription connectionDescription) {
+        validateCollation(connectionDescription, collation);
+        BsonDocument commandDocument = new BsonDocument("findAndModify", new BsonString(getNamespace().getCollectionName()));
+        putIfNotNull(commandDocument, "query", getFilter());
+        putIfNotNull(commandDocument, "fields", getProjection());
+        putIfNotNull(commandDocument, "sort", getSort());
+        commandDocument.put("new", new BsonBoolean(!isReturnOriginal()));
+        putIfTrue(commandDocument, "upsert", isUpsert());
+        putIfNotZero(commandDocument, "maxTimeMS", getMaxTime(MILLISECONDS));
+        if (getUpdatePipeline() != null) {
+            commandDocument.put("update", new BsonArray(toBsonValueList(getUpdatePipeline())));
+        } else {
+            putIfNotNull(commandDocument, "update", getUpdate());
+        }
+        if (bypassDocumentValidation != null && serverIsAtLeastVersionThreeDotTwo(connectionDescription)) {
+            commandDocument.put("bypassDocumentValidation", BsonBoolean.valueOf(bypassDocumentValidation));
+        }
+        addWriteConcernToCommand(connectionDescription, commandDocument, sessionContext);
+        if (collation != null) {
+            commandDocument.put("collation", collation.asDocument());
+        }
+        if (arrayFilters != null) {
+            commandDocument.put("arrayFilters", new BsonArray(arrayFilters));
+        }
+        addTxnNumberToCommand(serverDescription, connectionDescription, commandDocument, sessionContext);
+        return commandDocument;
     }
 }

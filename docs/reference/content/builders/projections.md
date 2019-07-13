@@ -7,7 +7,7 @@ title = "Projections"
   pre = "<i class='fa'></i>"
 +++
 
-## Filters
+## Projections
 
 The [`Projections`]({{< apiref "com/mongodb/client/model/Projections" >}}) class provides static factory methods for all the MongoDB 
 projection opererators.  Each method returns an instance of the [`Bson`]({{< relref "bson/documents.md#bson" >}}) type, which can in turn
@@ -16,7 +16,7 @@ be passed to any method that expects a projection.
 For brevity, you may choose to import the methods of the `Projections` class statically:
 
 ```java
-import com.mongodb.client.model.Projections.*;
+import static com.mongodb.client.model.Projections.*;
 ```
   
 All the examples below assume this static import.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,8 +33,6 @@ import static com.mongodb.ClusterFixture.enableMaxTimeFailPoint
 import static com.mongodb.ClusterFixture.executeAsync
 import static com.mongodb.ClusterFixture.getBinding
 import static com.mongodb.ClusterFixture.isSharded
-import static com.mongodb.ClusterFixture.serverVersionAtLeast
-import static java.util.Arrays.asList
 
 class CommandOperationSpecification extends OperationFunctionalSpecification {
 
@@ -61,10 +59,8 @@ class CommandOperationSpecification extends OperationFunctionalSpecification {
 
         then:
         result.getNumber('n').intValue() == 0
-
     }
 
-    @Category(Slow)
     def 'should execute write command'() {
         when:
         def result = new CommandWriteOperation<BsonDocument>(getNamespace().databaseName,
@@ -112,7 +108,7 @@ class CommandOperationSpecification extends OperationFunctionalSpecification {
         result.containsKey('value')
     }
 
-    @IgnoreIf({ isSharded() || !serverVersionAtLeast(asList(2, 6, 0)) })
+    @IgnoreIf({ isSharded() })
     def 'should throw execution timeout exception from execute'() {
         given:
         def commandOperation = new CommandReadOperation<BsonDocument>(getNamespace().databaseName,
@@ -132,7 +128,7 @@ class CommandOperationSpecification extends OperationFunctionalSpecification {
     }
 
     @Category(Async)
-    @IgnoreIf({ isSharded() || !serverVersionAtLeast(asList(2, 6, 0)) })
+    @IgnoreIf({ isSharded() })
     def 'should throw execution timeout exception from executeAsync'() {
         given:
         def commandOperation = new CommandReadOperation<BsonDocument>(getNamespace().databaseName,

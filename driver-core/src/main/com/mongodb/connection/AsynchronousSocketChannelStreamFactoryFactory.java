@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package com.mongodb.connection;
 
+import java.nio.channels.AsynchronousChannelGroup;
+
 /**
  * A {@code StreamFactoryFactory} implementation for AsynchronousSocketChannel-based streams.
  *
@@ -23,8 +25,62 @@ package com.mongodb.connection;
  * @since 3.1
  */
 public class AsynchronousSocketChannelStreamFactoryFactory implements StreamFactoryFactory {
+    private final AsynchronousChannelGroup group;
+
+    /**
+     * Construct an instance with the default {@code BufferProvider} and {@code AsynchronousChannelGroup}.
+     *
+     * @deprecated Use {@link AsynchronousSocketChannelStreamFactoryFactory#builder()} instead to construct the
+     * {@code AsynchronousSocketChannelStreamFactoryFactory}.
+     */
+    @Deprecated
+    public AsynchronousSocketChannelStreamFactoryFactory() {
+        this(builder());
+    }
+
+    /**
+     * Gets a builder for an instance of {@code AsynchronousSocketChannelStreamFactoryFactory}.
+     * @return the builder
+     * @since 3.6
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * A builder for an instance of {@code AsynchronousSocketChannelStreamFactoryFactory}.
+     *
+     * @since 3.6
+     */
+    public static final class Builder {
+        private AsynchronousChannelGroup group;
+
+        /**
+         * Sets the {@code AsynchronousChannelGroup}
+         *
+         * @param group the {@code AsynchronousChannelGroup}
+         * @return this
+         */
+        public Builder group(final AsynchronousChannelGroup group) {
+            this.group = group;
+            return this;
+        }
+
+        /**
+         * Build an instance of {@code AsynchronousSocketChannelStreamFactoryFactory}.
+         * @return the AsynchronousSocketChannelStreamFactoryFactory
+         */
+        public AsynchronousSocketChannelStreamFactoryFactory build() {
+            return new AsynchronousSocketChannelStreamFactoryFactory(this);
+        }
+    }
+
     @Override
     public StreamFactory create(final SocketSettings socketSettings, final SslSettings sslSettings) {
-        return new AsynchronousSocketChannelStreamFactory(socketSettings, sslSettings);
+        return new AsynchronousSocketChannelStreamFactory(socketSettings, sslSettings,  group);
+    }
+
+    private AsynchronousSocketChannelStreamFactoryFactory(final Builder builder) {
+        group = builder.group;
     }
 }

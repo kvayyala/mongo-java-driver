@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 package com.mongodb.client.model.geojson;
+
+import com.mongodb.lang.Nullable;
 
 import static com.mongodb.assertions.Assertions.notNull;
 
@@ -41,7 +43,7 @@ public final class Point extends Geometry {
      * @param coordinateReferenceSystem the coordinate reference system
      * @param coordinate the non-null coordinate of the point
      */
-    public Point(final CoordinateReferenceSystem coordinateReferenceSystem, final Position coordinate) {
+    public Point(@Nullable final CoordinateReferenceSystem coordinateReferenceSystem, final Position coordinate) {
         super(coordinateReferenceSystem);
         this.coordinate = notNull("coordinates", coordinate);
     }

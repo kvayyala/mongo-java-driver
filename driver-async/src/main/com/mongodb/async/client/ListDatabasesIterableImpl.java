@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,35 +16,35 @@
 
 package com.mongodb.async.client;
 
-import com.mongodb.Block;
-import com.mongodb.Function;
+import com.mongodb.ReadConcern;
 import com.mongodb.ReadPreference;
 import com.mongodb.async.AsyncBatchCursor;
-import com.mongodb.async.SingleResultCallback;
-import com.mongodb.operation.AsyncOperationExecutor;
-import com.mongodb.operation.ListDatabasesOperation;
+import com.mongodb.internal.operation.AsyncOperations;
+import com.mongodb.lang.Nullable;
+import com.mongodb.operation.AsyncReadOperation;
+import org.bson.BsonDocument;
 import org.bson.codecs.configuration.CodecRegistry;
+import org.bson.conversions.Bson;
 
-import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 import static com.mongodb.assertions.Assertions.notNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-final class ListDatabasesIterableImpl<TResult> implements ListDatabasesIterable<TResult> {
+final class ListDatabasesIterableImpl<TResult> extends MongoIterableImpl<TResult> implements ListDatabasesIterable<TResult> {
+    private AsyncOperations<BsonDocument> operations;
     private final Class<TResult> resultClass;
-    private final ReadPreference readPreference;
-    private final CodecRegistry codecRegistry;
-    private final AsyncOperationExecutor executor;
 
     private long maxTimeMS;
+    private Bson filter;
+    private Boolean nameOnly;
 
-    ListDatabasesIterableImpl(final Class<TResult> resultClass, final CodecRegistry codecRegistry,
-                              final ReadPreference readPreference, final AsyncOperationExecutor executor) {
-        this.resultClass = notNull("resultClass", resultClass);
-        this.codecRegistry = notNull("codecRegistry", codecRegistry);
-        this.readPreference = notNull("readPreference", readPreference);
-        this.executor = notNull("executor", executor);
+    ListDatabasesIterableImpl(@Nullable final ClientSession clientSession, final Class<TResult> resultClass,
+                              final CodecRegistry codecRegistry, final ReadPreference readPreference,
+                              final OperationExecutor executor, final boolean retryReads) {
+        super(clientSession, executor, ReadConcern.DEFAULT, readPreference, retryReads); // TODO: read concern?
+        this.operations = new AsyncOperations<BsonDocument>(BsonDocument.class, readPreference, codecRegistry, retryReads);
+        this.resultClass = notNull("clazz", resultClass);
     }
 
     @Override
@@ -54,46 +54,27 @@ final class ListDatabasesIterableImpl<TResult> implements ListDatabasesIterable<
         return this;
     }
 
-    @Override
-    public void first(final SingleResultCallback<TResult> callback) {
-        execute(createListDatabasesOperation()).first(callback);
-    }
 
     @Override
-    public void forEach(final Block<? super TResult> block, final SingleResultCallback<Void> callback) {
-        execute().forEach(block, callback);
-    }
-
-    @Override
-    public <A extends Collection<? super TResult>> void into(final A target, final SingleResultCallback<A> callback) {
-        execute().into(target, callback);
-    }
-
-    @Override
-    public <U> MongoIterable<U> map(final Function<TResult, U> mapper) {
-        return new MappingIterable<TResult, U>(this, mapper);
-    }
-
-    @Override
-    public ListDatabasesIterableImpl<TResult> batchSize(final int batchSize) {
-        // Noop - not supported by listDatabasesIterable
+    public ListDatabasesIterable<TResult> batchSize(final int batchSize) {
+        super.batchSize(batchSize);
         return this;
     }
 
     @Override
-    public void batchCursor(final SingleResultCallback<AsyncBatchCursor<TResult>> callback) {
-        execute().batchCursor(callback);
+    public ListDatabasesIterable<TResult> filter(@Nullable final Bson filter) {
+        this.filter = filter;
+        return this;
     }
 
-    private MongoIterable<TResult> execute() {
-        return execute(createListDatabasesOperation());
+    @Override
+    public ListDatabasesIterable<TResult> nameOnly(@Nullable final Boolean nameOnly) {
+        this.nameOnly = nameOnly;
+        return this;
     }
 
-    private MongoIterable<TResult> execute(final ListDatabasesOperation<TResult> operation) {
-        return new OperationIterable<TResult>(operation, readPreference, executor);
-    }
-
-    private ListDatabasesOperation<TResult> createListDatabasesOperation() {
-        return new ListDatabasesOperation<TResult>(codecRegistry.get(resultClass)).maxTime(maxTimeMS, MILLISECONDS);
+    @Override
+    AsyncReadOperation<AsyncBatchCursor<TResult>> asAsyncReadOperation() {
+        return operations.listDatabases(resultClass, filter, nameOnly, maxTimeMS);
     }
 }

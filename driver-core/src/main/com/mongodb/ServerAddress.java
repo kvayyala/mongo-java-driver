@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2014 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +17,14 @@
 package com.mongodb;
 
 import com.mongodb.annotations.Immutable;
+import com.mongodb.lang.Nullable;
 
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Represents the location of a Mongo server - i.e. server name and port number
@@ -45,7 +48,7 @@ public class ServerAddress implements Serializable {
      *
      * @param host hostname
      */
-    public ServerAddress(final String host) {
+    public ServerAddress(@Nullable final String host) {
         this(host, defaultPort());
     }
 
@@ -83,7 +86,7 @@ public class ServerAddress implements Serializable {
      * @param host hostname
      * @param port mongod port
      */
-    public ServerAddress(final String host, final int port) {
+    public ServerAddress(@Nullable final String host, final int port) {
         String hostToUse = host;
         if (hostToUse == null) {
             hostToUse = defaultHost();
@@ -92,7 +95,6 @@ public class ServerAddress implements Serializable {
         if (hostToUse.length() == 0) {
             hostToUse = defaultHost();
         }
-
         int portToUse = port;
 
         if (hostToUse.startsWith("[")) {
@@ -112,7 +114,8 @@ public class ServerAddress implements Serializable {
             hostToUse = host.substring(1, idx);
         } else {
             int idx = hostToUse.indexOf(":");
-            if (idx > 0) {
+            int lastIdx = hostToUse.lastIndexOf(":");
+            if (idx == lastIdx && idx > 0) {
                 if (port != defaultPort()) {
                     throw new IllegalArgumentException("can't specify port in construct and via host");
                 }
@@ -124,7 +127,6 @@ public class ServerAddress implements Serializable {
                 hostToUse = hostToUse.substring(0, idx).trim();
             }
         }
-
         this.host = hostToUse.toLowerCase();
         this.port = portToUse;
     }
@@ -189,6 +191,27 @@ public class ServerAddress implements Serializable {
         }
     }
 
+    /**
+     * Gets all underlying socket addresses
+     *
+     * @return array of socket addresses
+     *
+     * @since 3.9
+     */
+    public List<InetSocketAddress> getSocketAddresses() {
+        try {
+            InetAddress[] inetAddresses = InetAddress.getAllByName(host);
+            List<InetSocketAddress> inetSocketAddressList = new ArrayList<InetSocketAddress>();
+            for (InetAddress inetAddress : inetAddresses) {
+                inetSocketAddressList.add(new InetSocketAddress(inetAddress, port));
+            }
+
+            return inetSocketAddressList;
+        } catch (UnknownHostException e) {
+            throw new MongoSocketException(e.getMessage(), this, e);
+        }
+    }
+
     @Override
     public String toString() {
         return host + ":" + port;
@@ -217,16 +240,10 @@ public class ServerAddress implements Serializable {
      *
      * @param hostName the address to compare
      * @return if they are the same
+     * @deprecated use the {@link #equals(Object)} method instead
      */
+    @Deprecated
     public boolean sameHost(final String hostName) {
-        String hostToUse = hostName;
-        int idx = hostToUse.indexOf(":");
-        int portToUse = defaultPort();
-        if (idx > 0) {
-            portToUse = Integer.parseInt(hostToUse.substring(idx + 1));
-            hostToUse = hostToUse.substring(0, idx);
-        }
-
-        return getPort() == portToUse && getHost().equalsIgnoreCase(hostToUse);
+        return equals(new ServerAddress(hostName));
     }
 }

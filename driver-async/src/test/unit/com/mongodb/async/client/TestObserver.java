@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 MongoDB, Inc.
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -60,8 +60,9 @@ public class TestObserver<T> implements Observer<T> {
     }
 
     @Override
-    public void onSubscribe(final Subscription subscription) {
+    public synchronized void onSubscribe(final Subscription subscription) {
         this.subscription = subscription;
+        delegate.onSubscribe(subscription);
     }
 
     /**
@@ -76,7 +77,7 @@ public class TestObserver<T> implements Observer<T> {
      * @param result the item emitted by the obserable
      */
     @Override
-    public void onNext(final T result) {
+    public synchronized void onNext(final T result) {
         onNextEvents.add(result);
         delegate.onNext(result);
     }
@@ -91,7 +92,7 @@ public class TestObserver<T> implements Observer<T> {
      * @param e the exception encountered by the obserable
      */
     @Override
-    public void onError(final Throwable e) {
+    public synchronized void onError(final Throwable e) {
         try {
             onErrorEvents.add(e);
             delegate.onError(e);
@@ -107,7 +108,7 @@ public class TestObserver<T> implements Observer<T> {
      * </p>
      */
     @Override
-    public void onComplete() {
+    public synchronized void onComplete() {
         try {
             onCompleteEvents.add(null);
             delegate.onComplete();
@@ -122,7 +123,7 @@ public class TestObserver<T> implements Observer<T> {
      * @param n the maximum number of items you want the obserable to emit to the Subscriber at this time, or
      *          {@code Long.MAX_VALUE} if you want the obserable to emit items at its own pace
      */
-    public void requestMore(final long n) {
+    public synchronized void requestMore(final long n) {
         subscription.request(n);
     }
 
@@ -132,7 +133,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @return a list of the Throwables that were passed to this Subscriber's {@link #onError} method
      */
-    public List<Throwable> getOnErrorEvents() {
+    public synchronized List<Throwable> getOnErrorEvents() {
         return onErrorEvents;
     }
 
@@ -141,7 +142,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @return a list of items observed by this Subscriber, in the order in which they were observed
      */
-    public List<T> getOnNextEvents() {
+    public synchronized List<T> getOnNextEvents() {
         return onNextEvents;
     }
 
@@ -150,7 +151,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @return the subscription or null if not subscribed to
      */
-    public Subscription getSubscription() {
+    public synchronized Subscription getSubscription() {
         return subscription;
     }
 
@@ -160,7 +161,7 @@ public class TestObserver<T> implements Observer<T> {
      * @param items the sequence of items expected to have been observed
      * @throws AssertionError if the sequence of items observed does not exactly match {@code items}
      */
-    public void assertReceivedOnNext(final List<T> items) {
+    public synchronized void assertReceivedOnNext(final List<T> items) {
         if (getOnNextEvents().size() != items.size()) {
             throw new AssertionError("Number of items does not match. Provided: " + items.size() + "  Actual: " + getOnNextEvents().size());
         }
@@ -185,7 +186,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @throws AssertionError if not exactly one terminal event notification was received
      */
-    public void assertTerminalEvent() {
+    public synchronized void assertTerminalEvent() {
         if (onErrorEvents.size() > 1) {
             throw new AssertionError("Too many onError events: " + onErrorEvents.size());
         }
@@ -208,8 +209,8 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @throws AssertionError if a terminal event notification was received
      */
-    public void assertNoTerminalEvent() {
-        if (onCompleteEvents.size() != 0 && onErrorEvents.size() != 0) {
+    public synchronized void assertNoTerminalEvent() {
+        if (onCompleteEvents.size() > 0 || onErrorEvents.size() > 0) {
             throw new AssertionError("Terminal events received.");
         }
     }
@@ -219,7 +220,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @throws AssertionError if this {@link Subscription} is not unsubscribed
      */
-    public void assertUnsubscribed() {
+    public synchronized void assertUnsubscribed() {
         if (subscription == null || !subscription.isUnsubscribed()) {
             throw new AssertionError("Not unsubscribed.");
         }
@@ -241,7 +242,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @throws AssertionError if this {@link Observer} has received one or more {@link #onError} notifications
      */
-    public void assertNoErrors() {
+    public synchronized void assertNoErrors() {
         if (onErrorEvents.size() > 0) {
             // can't use AssertionError because (message, cause) doesn't exist until Java 7
             throw new RuntimeException("Unexpected onError events: " + getOnErrorEvents().size(), getOnErrorEvents().get(0));
@@ -253,7 +254,7 @@ public class TestObserver<T> implements Observer<T> {
      *
      * @throws AssertionError if this {@link Observer} did not received an {@link #onError} notifications
      */
-    public void assertErrored() {
+    public synchronized void assertErrored() {
         if (onErrorEvents.size() == 0) {
             // can't use AssertionError because (message, cause) doesn't exist until Java 7
             throw new RuntimeException("No onError events");

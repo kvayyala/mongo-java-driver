@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008 - 2014 MongoDB Inc. <http://mongodb.com>
+ * Copyright 2008-present MongoDB, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,18 +55,6 @@ class BulkWriteBatchCombinerSpecification extends Specification {
 
         then:
         result == BulkWriteResult.acknowledged(INSERT, 1, 0, [])
-    }
-
-    def 'should handle null modifiedCount'() {
-        def combiner = new BulkWriteBatchCombiner(new ServerAddress(), true, ACKNOWLEDGED)
-        combiner.addResult(BulkWriteResult.acknowledged(UPDATE, 1, null, []), new IndexMap.RangeBased().add(0, 0))
-        combiner.addResult(BulkWriteResult.acknowledged(INSERT, 1, 0, []), new IndexMap.RangeBased().add(0, 0))
-
-        when:
-        def result = combiner.getResult()
-
-        then:
-        result == BulkWriteResult.acknowledged(1, 1, 0, null, [])
     }
 
     def 'should sort upserts'() {

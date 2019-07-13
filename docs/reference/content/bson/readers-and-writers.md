@@ -12,7 +12,7 @@ title = "Readers and Writers"
 The various implementations of the `Bson` interface discussed in the previous section all represent BSON documents using an underlying 
 Java `Map` instance. However, they are not directly responsible for reading and writing their representations from and to BSON.  Instead, 
 this process is delegated to [`BsonWriter`]({{< apiref "org/bson/BsonWriter" >}}) and 
-[`BsonReader`]({{< apiref "org/bson/BsonReader" >}}), abstract classes that expose methods for iterative, stream-based processing of 
+[`BsonReader`]({{< apiref "org/bson/BsonReader" >}}), interfaces that expose methods for iterative, stream-based processing of 
 BSON documents. 
   
 ### BsonWriter
@@ -54,7 +54,7 @@ The two most important classes to extend `BsonWriter` are [`BsonBinaryWriter`]({
 [`JsonWriter`]({{< apiref "org/bson/json/JsonWriter" >}}).  `BsonBinaryWriter` writes the BSON 
 document as a stream of bytes in accordance with the [BSON](http://www.bsonspec.org) specification, while `JsonWriter` writes the BSON 
 document as a stream of characters in accordance with 
-[MongoDB Extended JSON](http://docs.mongodb.org/manual/reference/mongodb-extended-json/).
+[MongoDB Extended JSON](https://github.com/mongodb/specifications/blob/master/source/extended-json.rst).
  
 ### BsonReader
 
@@ -134,4 +134,4 @@ The two most important classes to extend `BsonReader` are [`BsonBinaryReader`]({
 [`JsonReader`]({{< apiref "org/bson/json/JsonReader" >}}). `BsonBinaryReader` reads the BSON 
 document as a stream of bytes in accordance with the [BSON](http://www.bsonspec.org) specification, while `JsonReader` reads the BSON 
 document as a stream of characters in accordance with 
-[MongoDB Extended JSON](http://docs.mongodb.org/manual/reference/mongodb-extended-json/).                              
+[MongoDB Extended JSON](https://github.com/mongodb/specifications/blob/master/source/extended-json.rst).                              
